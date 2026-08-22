@@ -67,6 +67,12 @@
           "reason": "The page shows a form to create a new repository."
         },
         "discoveredBy": "heuristic"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "The app served the result at a new URL containing the submitted repository name, confirming creation.",
+        "at": "2026-08-22T12:41:20.846Z",
+        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -137,7 +143,15 @@
           "reason": "An issue was created by filling out the form and clicking the button."
         },
         "discoveredBy": "heuristic"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "The app navigated to a new URL containing the submitted title's identifier and the new issue count incremented, confirming creation.",
+        "at": "2026-08-22T12:41:26.692Z",
+        "by": "openai/gpt-4.1-mini"
       }
     }
-  ]
+  ],
+  "rejected": [],
+  "verifiedAt": "2026-08-22T12:41:26.721Z"
 }

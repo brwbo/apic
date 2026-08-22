@@ -371,10 +371,16 @@ Stated plainly, because a compiler that hides its failure modes isn't one.
   perception falls back to the heuristic. Each
   integration was written to degrade silently, and each did — the degradation
   is the intended behaviour; not noticing for a whole afternoon is not.
-- **Only one app has been compiled end to end.** A second target (Gitea)
-  authenticates through the same discovered login with no configuration, but
-  discovery returns zero candidates there. Unresolved.
-- **8/18 recall.** Missing: bucket creation, comments, relations and attachments.
+- **The second target compiles thinly.** Gitea now compiles end to end —
+  `createRepository` and `createIssue`, both verified, **2/13 on its issue
+  slice** against `swagger.v1.json`. It took no change to discovery: the two
+  fixes were a confirmation class (Gitea confirms a write by *serving the
+  result at a new URL* carrying the submitted value, and the gate only looked
+  for banners and body echoes) and moving the container/item URL patterns out
+  of `cli.js` into configuration, where `APIC_SEEDS` already lived. Label and
+  comment actions are still missed: they sit behind controls the vocabulary
+  does not name, and `h` named none of the 14 it was handed.
+- **8/18 recall on Vikunja.** Missing: bucket creation, comments, relations and attachments.
 - **`markTask` fails roughly one run in two** (see Results). The effect is real
   and observed; whether anything *confirms* it depends on the task's existing
   state. Any live `npm run verify` should be expected to print 8/9 or 9/9.

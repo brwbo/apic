@@ -11,9 +11,14 @@ import { config } from './config.js'
 
 const WRITE_METHODS = new Set(['post', 'put', 'delete', 'patch'])
 
+// Every target keeps its spec somewhere else and slices differently. Defaults
+// are Vikunja's, so `npm run score` is unchanged; Gitea passes its own.
+const res = (v, d) => (v || d).split(',').map((x) => x.trim()).filter(Boolean).map((x) => new RegExp(x))
+const SPEC_PATH = process.env.APIC_SPEC_PATH || '/api/v1/docs.json'
+
 // The board slice. The full Vikunja surface (105 write ops) is mostly admin,
 // OpenID callbacks and CSV migration - noise for a Kanban demo.
-const SLICE = [/^\/projects(\/|$)/, /^\/tasks(\/|$)/, /^\/labels(\/|$)/]
+const SLICE = res(process.env.APIC_SLICE, '^\\/projects(\\/|$),^\\/tasks(\\/|$),^\\/labels(\\/|$)')
 // Board actions only: what a human can plainly do on a Kanban board.
 // Dropped: teams, project-level user perms, shares, views admin, attachments,
 // relations, duplicate, bulk ops, read receipts - none are board gestures.
@@ -21,15 +26,16 @@ const EXCLUDE = [
   /webhook/i, /subscription/i, /background/i, /avatar/i, /migration/i, /export/i,
   /\/teams/i, /\/shares/i, /\/attachments/i, /\/relations/i, /duplicate/i,
   /\/bulk/i, /\/read$/i, /^\/projects\/\{[^}]+\}\/users/i,
+  ...res(process.env.APIC_EXCLUDE, ''),
 ]
 // Views paths are admin noise EXCEPT the bucket-task move, which is the
 // single most visually obvious action on a board.
 const KEEP_ANYWAY = [/\/buckets\/\{[^}]+\}\/tasks$/]
 
 export async function groundTruth(baseUrl = config.target.url) {
-  const res = await fetch(`${baseUrl}/api/v1/docs.json`)
-  if (!res.ok) throw new Error(`spec fetch failed: ${res.status} from ${baseUrl}`)
-  const spec = await res.json()
+  const r = await fetch(`${baseUrl}${SPEC_PATH}`)
+  if (!r.ok) throw new Error(`spec fetch failed: ${r.status} from ${baseUrl}${SPEC_PATH}`)
+  const spec = await r.json()
 
   const ops = []
   for (const [path, methods] of Object.entries(spec.paths || {})) {
@@ -61,6 +67,22 @@ function parse(tool) {
   return { verb: words[0], noun: words.slice(1).join('') }
 }
 
+/**
+ * A path segment and a tool noun name the same resource.
+ *
+ * The UI says "Repository" and Gitea's API says /user/repos, so plural-stripping
+ * alone scores a correct tool as a miss. The alias table holds the cases where
+ * an API abbreviates the word its own UI spells out - short, and each entry is
+ * a fact about one target rather than a guess.
+ */
+const ALIAS = { repository: 'repo', repositories: 'repo', repos: 'repo', issues: 'issue' }
+const stem = (w) => {
+  const s = String(w || '').toLowerCase()
+  if (ALIAS[s]) return ALIAS[s]
+  const singular = s.replace(/ies$/, 'y').replace(/s$/, '')
+  return ALIAS[singular] || singular
+}
+
 function matches(tool, op) {
   const { verb, noun } = parse(tool)
   if (!verb || !noun) return false
@@ -69,7 +91,7 @@ function matches(tool, op) {
   // the noun must be the LAST resource segment of the path, not merely present
   const segs = op.path.split('/').filter((s) => s && !s.startsWith('{'))
   const last = segs[segs.length - 1] || ''
-  return last === noun || last === noun + 's' || last.replace(/s$/, '') === noun
+  return stem(last) === stem(noun)
 }
 
 export function score(tools, truth) {
@@ -88,7 +110,7 @@ export function score(tools, truth) {
   }
 }
 
-function loadTools(path = 'generated/vikunja/tools.json') {
+function loadTools(path = `generated/${process.env.APIC_APP || 'vikunja'}/tools.json`) {
   if (!existsSync(path)) return []
   try { return JSON.parse(readFileSync(path, 'utf8')).tools || [] } catch { return [] }
 }
