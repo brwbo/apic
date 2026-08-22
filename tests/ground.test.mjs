@@ -74,3 +74,15 @@ test('an off-slice term that collides with a noun is refused', async () => {
   assert.equal(r.refused, 1)
   assert.deepEqual(plan.gesture('NEW LABEL'), { verb: 'create', noun: 'label', label: 'create label' })
 })
+
+test('the product name is the last title segment, not the first', async () => {
+  const { appNameFrom } = await import('../src/ground.js')
+  // Both of these shipped a wrong search query before this existed: taking the
+  // first segment grounded Vikunja's vocabulary in generic to-do-list prose.
+  assert.equal(appNameFrom('Current Tasks | Vikunja'), 'Vikunja')
+  assert.equal(appNameFrom('Dashboard - Gitea: Git with a cup of tea'), 'Gitea')
+  assert.equal(appNameFrom('Issues · apic/testrepo - Gitea'), 'Gitea')
+  assert.equal(appNameFrom('Vikunja'), 'Vikunja')
+  assert.equal(appNameFrom(''), null)
+  assert.equal(appNameFrom(null), null)
+})

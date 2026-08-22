@@ -80,6 +80,33 @@ speculative one.`
 
 export function available() { return Boolean(config.keys.tavily) }
 
+/**
+ * What is this product called? Everything downstream is a search query, so the
+ * wrong name here quietly grounds the compile in the wrong app's docs.
+ *
+ * The page title is the obvious source and the obvious trap: it names the
+ * CURRENT PAGE first and the product last. Vikunja serves "Current Tasks |
+ * Vikunja" and Gitea serves "Dashboard - Gitea: Git with a cup of tea", so
+ * taking the first segment searches for "Current Tasks" and grounds the
+ * vocabulary in generic to-do-list prose - which is exactly what it did before
+ * this existed. Take the LAST segment, then drop any tagline after a colon.
+ */
+export function appNameFrom(title) {
+  const t = String(title || '').trim()
+  if (!t) return null
+  const seg = t.split(/\s[|·–—]\s|\s-\s|[|·–—]/).map((x) => x.trim()).filter(Boolean).pop() || t
+  return seg.split(':')[0].trim().slice(0, 40) || null
+}
+
+/** Prefer what the app declares about itself over what the page is called. */
+export async function appName(page) {
+  const declared = await page.evaluate(() => {
+    const m = (sel) => document.querySelector(sel)?.getAttribute('content')?.trim()
+    return m('meta[property="og:site_name"]') || m('meta[name="application-name"]') || ''
+  }).catch(() => '')
+  return appNameFrom(declared) || appNameFrom(await page.title().catch(() => '')) || null
+}
+
 const cachePath = (url) => join(CACHE_DIR, `vocab-${new URL(url).host.replace(/[^a-z0-9.-]/gi, '_')}.json`)
 
 /** Ask Tavily for the app's documentation. Returns prose evidence, or null. */

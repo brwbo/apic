@@ -2,7 +2,7 @@
 import { discoverOn, discoverInline, discoverTask, describe, links } from './discover.js'
 import { discoverMove } from './kanban.js'
 import { gesture, learnVocabulary, vocabulary } from './plan.js'
-import { ground, summarise as summariseVocab } from './ground.js'
+import { ground, appName, summarise as summariseVocab } from './ground.js'
 import { openSession, ensure, closeSession } from './session.js'
 import { synthesize } from './synthesize.js'
 import { distill, summarise } from './distill.js'
@@ -52,7 +52,7 @@ try {
   // as general as a constant in a source file. ground.js reads the target's
   // documentation instead. Additive and optional: a failure here logs and the
   // built-in table stands.
-  const app = process.env.APIC_APP || (await page.title()).split(/[|\-–·]/)[0].trim() || 'the target app'
+  const app = process.env.APIC_APP || (await appName(page)) || 'the target app'
   const vocab = await ground({ app, url: config.target.url, log: (m) => console.log(`  \x1b[33m!\x1b[0m ${m}`) })
   if (vocab) {
     const learned = learnVocabulary(vocab)
