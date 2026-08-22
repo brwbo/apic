@@ -8,15 +8,15 @@ import { Marquee } from "@/components/ui/marquee";
 type Item = { name: string; src?: string; stage?: string };
 
 const STACK: Item[] = [
-  { name: "h", stage: "explore" },
-  { name: "fal", stage: "perceive" },
+  { name: "h", src: "/logos/h.svg", stage: "explore" },
+  { name: "fal", src: "/logos/fal.svg", stage: "perceive" },
   // ground, not synthesise: synthesize.js is heuristic-only - verb and noun off
   // the label, JSON Schema off the fields, no model in it. OpenAI's two real
   // jobs are structuring Tavily's prose into a vocabulary, and judging whether a
   // replayed tool did what it claimed.
   { name: "OpenAI", src: "/logos/openai_dark.svg", stage: "ground · verify" },
-  { name: "Tavily", stage: "ground" },
-  { name: "Pioneer", stage: "distill" },
+  { name: "Tavily", src: "/logos/tavily.svg", stage: "ground" },
+  { name: "Pioneer", src: "/logos/pioneer.svg", stage: "distill" },
 ];
 
 const CLIENTS: Item[] = [
@@ -30,12 +30,13 @@ const CLIENTS: Item[] = [
 function Mark({ item, size = 20 }: { item: Item; size?: number }) {
   if (item.src) {
     return (
+      // Height-constrained with width left to the artwork: h's mark is a circle
+      // beside an H at 30x18, so a square box would squash it.
       <img
         src={item.src}
         alt=""
-        width={size}
         height={size}
-        style={{ width: size, height: size }}
+        style={{ height: size, width: "auto" }}
         className="shrink-0 opacity-90"
         aria-hidden
       />
