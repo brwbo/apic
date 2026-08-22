@@ -28,10 +28,10 @@ const PARTNERS: Partner[] = [
     name: "h",
     src: "/logos/h.svg",
     stage: "explore",
-    role: "Chooses the next action to try from the affordances on the page.",
-    detail: "holo3-1-35b-a3b · OpenAI-compatible inference endpoint",
-    note: "The hosted Agent Platform runs the browser on h's own infrastructure, with no bring-your-own CDP endpoint, so it cannot reach a Vikunja on localhost. apic keeps its local browser and puts Holo where the decision actually is.",
-    without: "Labels are ranked heuristically, and any control the built-in noun tables cannot place is dropped.",
+    role: "Reads the controls the closed vocabulary refused, and names the ones that write.",
+    detail: "holo3-1-35b-a3b · OpenAI-compatible inference endpoint · one JPEG of the page per seed",
+    note: "An escalation tier, not the planner. gesture() maps a control's visible text to a <verb, resource> pair and returns null for everything else — that null is the precision gate, and it is also where recall goes: an icon-only button is dropped however plainly it writes. h is handed exactly that set, once per seed, and every answer is validated back against the same six verbs and four resources, so it can recover a control but never invent a verb. Measured on this target: 3 unresolved controls read, 1 named — a Kanban bucket control with no text, recovered from its icon.",
+    without: "Any control the built-in noun tables cannot place is dropped, and nothing looks at it a second time.",
   },
   {
     name: "fal",
@@ -39,7 +39,7 @@ const PARTNERS: Partner[] = [
     stage: "perceive",
     role: "Settles whether a change was a real write or a cosmetic re-render.",
     detail: "fal-ai/any-llm/vision · gemini-2.5-flash-lite · 1440×900 frame inline as a data URI",
-    note: "It is an escalation tier, not a default. Steps the app already confirmed with its own success banner never reach it, so the VLM is spent only on the cases DOM text genuinely cannot settle.",
+    note: "It is an escalation tier, not a default. Steps the app already confirmed with its own success banner never reach it, so the VLM is spent only on the cases DOM text genuinely cannot settle. It runs on the CLI compile; a compile driven through compile_app on the MCP server stays on the text tier.",
     without: "The text classification stands, and a re-render can pass as a write.",
   },
   {
