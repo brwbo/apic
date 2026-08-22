@@ -9,7 +9,9 @@
   "scripts": {
     "score": "node src/score.js",
     "compile": "node src/cli.js",
-    "serve": "node src/server.js"
+    "serve": "node src/server.js",
+    "doctor": "node src/doctor.js",
+    "setup": "bash scripts/setup.sh"
   },
   "license": "MIT",
   "dependencies": {
