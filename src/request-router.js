@@ -15,6 +15,28 @@ import { compileRead, replayRead } from './discover-read.js'
 const MODEL = process.env.OPENAI_MODEL || 'gpt-4.1-mini'
 const client = () => new OpenAI({ apiKey: config.keys.openai, timeout: 45000 })
 const json = (text) => { try { return JSON.parse(String(text).replace(/```json|```/g, '').trim()) } catch { return null } }
+const MONEY = /(?:£|\$|€)\s?\d+(?:[.,]\d{1,2})?/
+
+/** State the non-negotiable evidence a request needs, rather than trusting a tool name. */
+export function evidenceNeeds(request) {
+  const text = String(request).toLowerCase()
+  return { price: /\b(cheapest|price|cost|fare|how much|estimate|quote)\b/.test(text) }
+}
+
+/** A price field is only evidence if cold replay returned a real money value. */
+export function supportsEvidence(tool, needs) {
+  if (!needs.price) return true
+  const fields = tool.recipe?.fields || []
+  const hasPriceField = fields.some((field) => /price|cost|fare|amount/i.test(field.name || ''))
+  const samples = tool.verification?.sample || []
+  const hasMoney = samples.some((row) => Object.values(row || {}).some((value) => MONEY.test(String(value))))
+  return hasPriceField && hasMoney
+}
+
+function hasObservedMoney(observations) {
+  return observations.some((observation) => (observation.result?.rows || [])
+    .some((row) => Object.values(row || {}).some((value) => MONEY.test(String(value)))))
+}
 
 async function findSites(request) {
   if (!config.keys.tavily) return []
@@ -65,13 +87,13 @@ async function chooseSite(request, sites) {
 
 const toolSummary = (tools) => tools.map((tool) => ({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema }))
 
-async function nextStep(request, tools, observations) {
+async function nextStep(request, tools, observations, needs = {}) {
   try {
     const response = await client().chat.completions.create({
       model: MODEL, temperature: 0, response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: 'You are an agent using read-only web tools. Return JSON only. Either {"tool":"exact tool name","arguments":{...}} to call a tool, or {"answer":"concise answer based only on observations"}. Use a tool when more evidence is needed. Never invent prices, availability, or URLs.' },
-        { role: 'user', content: JSON.stringify({ request, tools: toolSummary(tools), observations }) },
+        { role: 'system', content: 'You are an agent using read-only web tools. Return JSON only. Either {"tool":"exact tool name","arguments":{...}} to call a tool, or {"answer":"concise answer based only on observations"}. Use a tool when more evidence is needed. Never invent prices, availability, or URLs. If price evidence is required, do not answer until observations contain an actual currency value.' },
+        { role: 'user', content: JSON.stringify({ request, requiredEvidence: needs, tools: toolSummary(tools), observations }) },
       ],
     })
     return json(response.choices?.[0]?.message?.content)
@@ -86,6 +108,7 @@ export async function fulfillRequest(request, { outDir = 'generated', log = () =
     return { ok: false, error: 'fulfill_request needs OPENAI_API_KEY and TAVILY_API_KEY to select a public site' }
   }
   const sites = await findSites(request)
+  const needs = evidenceNeeds(request)
   const choice = await chooseSite(request, sites) || (sites[0] ? { url: sites[0].url, query: request.slice(0, 200) } : null)
   if (!choice) return { ok: false, error: 'could not identify a suitable public site from search results' }
   // Search results are only candidates, not proof that a page can be read.
@@ -110,8 +133,9 @@ export async function fulfillRequest(request, { outDir = 'generated', log = () =
         seeds: [{ url: seedUrl, samples: {} }], direct: [],
         maxControls: Number(process.env.APIC_REQUEST_CONTROLS || 3), log,
       })
-      if (candidate.verified?.length) { compiled = candidate; break }
-      attempts.push(`${target}: no cold-verified tool`)
+      const matching = (candidate.verified || []).filter((tool) => supportsEvidence(tool, needs))
+      if (matching.length) { compiled = candidate; break }
+      attempts.push(`${target}: ${candidate.verified?.length ? 'verified tools did not contain the requested evidence' : 'no cold-verified tool'}`)
     } catch (error) {
       attempts.push(`${target}: ${String(error.message || error).slice(0, 120)}`)
     }
@@ -122,8 +146,11 @@ export async function fulfillRequest(request, { outDir = 'generated', log = () =
 
   const observations = []
   for (let turn = 0; turn < 3; turn++) {
-    const step = await nextStep(request, tools, observations)
-    if (step?.answer) return { ok: true, app, target, answer: step.answer, evidence: observations, tools: tools.map((t) => t.name), compiled }
+    const step = await nextStep(request, tools, observations, needs)
+    if (step?.answer) {
+      if (needs.price && !hasObservedMoney(observations)) break
+      return { ok: true, app, target, answer: step.answer, evidence: observations, tools: tools.map((t) => t.name), compiled }
+    }
     const tool = tools.find((candidate) => candidate.name === step?.tool)
     if (!tool || !step?.arguments || typeof step.arguments !== 'object') break
     const result = await replayRead(tool, step.arguments)
@@ -131,6 +158,8 @@ export async function fulfillRequest(request, { outDir = 'generated', log = () =
     if (!result.ok) break
   }
   if (!observations.length) return { ok: false, target, error: 'the planner could not execute a verified tool', tools: tools.map((t) => t.name) }
-  const answer = await nextStep(request, tools, observations)
+  const hasMoney = hasObservedMoney(observations)
+  if (needs.price && !hasMoney) return { ok: false, target, error: 'the public flow returned no verified monetary evidence for this request', tools: tools.map((t) => t.name) }
+  const answer = await nextStep(request, tools, observations, needs)
   return { ok: true, app, target, answer: answer?.answer || 'I found results but could not safely summarise them.', evidence: observations, tools: tools.map((t) => t.name), compiled }
 }
