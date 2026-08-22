@@ -44,12 +44,12 @@ const PARTNERS: Partner[] = [
   },
   {
     name: "OpenAI",
-    stage: "synthesise · verify",
+    stage: "ground · verify",
     src: "/logos/openai_dark.svg",
-    role: "Turns a discovered action into a typed tool, then rules on whether the replayed tool did what it claims.",
+    role: "Turns the documentation Tavily found into a closed vocabulary, then rules on whether a replayed tool did what it claims.",
     detail: "gpt-4.1-mini · strict JSON schema, structured output",
-    note: "In verify it sits on top of the keyless diff judge, and may tighten a verdict but never loosen one. It has been caught citing a filter box's own echo as independent evidence — a judge looser than the free check is worse than no judge.",
-    without: "Heuristic verb-plus-noun naming, and deterministic diff judging alone.",
+    note: "Not synthesise — that stage takes verb and noun off the label and JSON Schema off the fields, with no model in it at all. In verify OpenAI sits on top of the keyless diff judge and may tighten a verdict but never loosen one. It has been caught citing a filter box's own echo as independent evidence — a judge looser than the free check is worse than no judge.",
+    without: "The built-in noun table stands, and deterministic diff judging alone.",
   },
   {
     name: "Tavily",

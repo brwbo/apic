@@ -10,7 +10,11 @@ type Item = { name: string; src?: string; stage?: string };
 const STACK: Item[] = [
   { name: "h", stage: "explore" },
   { name: "fal", stage: "perceive" },
-  { name: "OpenAI", src: "/logos/openai_dark.svg", stage: "synthesise · verify" },
+  // ground, not synthesise: synthesize.js is heuristic-only - verb and noun off
+  // the label, JSON Schema off the fields, no model in it. OpenAI's two real
+  // jobs are structuring Tavily's prose into a vocabulary, and judging whether a
+  // replayed tool did what it claimed.
+  { name: "OpenAI", src: "/logos/openai_dark.svg", stage: "ground · verify" },
   { name: "Tavily", stage: "ground" },
   { name: "Pioneer", stage: "distill" },
 ];
