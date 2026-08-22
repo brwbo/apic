@@ -54,9 +54,18 @@ export async function ensure(session, target = config.target) {
   const watch = (r) => { if (r.url().includes('/api/v1/') && r.status() === 401) unauthorized = true }
   page.on('response', watch)
   try {
-    await page.goto(`${target.url}/projects`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${target.url}${target.probePath || '/'}`, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(900)
-    if (!page.url().includes('/login') && !unauthorized) {
+
+    // Nor is a 401 the only tell. Gitea serves a landing page at / to logged-out
+    // users - no redirect, no 401, just a Sign In link. Ask structurally.
+    const signedOut = await page.evaluate(() => {
+      if (document.querySelector('input[type="password"]')) return true
+      return [...document.querySelectorAll('a, button')]
+        .some((el) => /^\s*(sign ?in|log ?in)\s*$/i.test((el.innerText || '').trim()))
+    }).catch(() => false)
+
+    if (!page.url().includes('/login') && !unauthorized && !signedOut) {
       session.authed = true
       return { reused: true }
     }

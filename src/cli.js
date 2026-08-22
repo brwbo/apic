@@ -11,7 +11,8 @@ import { emit } from './emit.js'
 import { config } from './config.js'
 import { writeFileSync, mkdirSync } from 'node:fs'
 
-const SEEDS = ['/projects', '/labels']
+// Seeds are per-target: nothing about the compiler knows Vikunja's routes.
+const SEEDS = (process.env.APIC_SEEDS || '/projects,/labels').split(',').map((x) => x.trim()).filter(Boolean)
 const PROJECT_SEED = /\/projects\/\d+/
 const TASK_SEED = /\/tasks\/\d+/
 const headless = !process.argv.includes('--headed')
@@ -77,6 +78,9 @@ try {
     await guard(seed)
     console.log(`  seed ${seed}`)
     await settle(await discoverOn(page, abs(seed), { onStep: line('\x1b[32m*\x1b[0m') }))
+    // Not every app hides its forms behind a button. Gitea's create-repo form
+    // sits on its own page, and button-first probing never reaches it.
+    await settle(await discoverInline(page, abs(seed), { onStep: line('\x1b[32m+\x1b[0m') }))
   }
 
   // A board is projects -> tasks -> labels. Follow the project apic just made.
@@ -149,7 +153,7 @@ try {
   writeFileSync('out/perception.json', JSON.stringify(perception, null, 2))
 
   const tools = synthesize(actions)
-  const { dir, count } = emit(tools, { app: 'vikunja', target: config.target.url })
+  const { dir, count } = emit(tools, { app: process.env.APIC_APP || 'vikunja', target: config.target.url })
   // generated/ is the shared demo artifact and other sessions compile into it
   // too. Snapshot this run's own output so `npm run score out/tools.json`
   // scores what THIS compile produced rather than whatever landed last.
