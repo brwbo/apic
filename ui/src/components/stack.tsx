@@ -1,23 +1,12 @@
 import { Marquee } from "@/components/ui/marquee";
 
 /**
- * Client logos ride a carousel; the five partner technologies stay a static
- * row, because each carries a stage label that wants reading rather than
- * scrolling past.
+ * The client logos ride a carousel. The five partner technologies used to sit
+ * above them as a static row with a stage label each, but the hero already
+ * shows those same five marks under "Built with" - partners.tsx is where the
+ * stage-by-stage detail lives, so the row here was pure repetition.
  */
-type Item = { name: string; src?: string; stage?: string };
-
-const STACK: Item[] = [
-  { name: "h", src: "/logos/h.svg", stage: "explore" },
-  { name: "fal", src: "/logos/fal.svg", stage: "perceive" },
-  // ground, not synthesise: synthesize.js is heuristic-only - verb and noun off
-  // the label, JSON Schema off the fields, no model in it. OpenAI's two real
-  // jobs are structuring Tavily's prose into a vocabulary, and judging whether a
-  // replayed tool did what it claimed.
-  { name: "OpenAI", src: "/logos/openai_dark.svg", stage: "ground · standby" },
-  { name: "Tavily", src: "/logos/tavily.svg", stage: "ground" },
-  { name: "Pioneer", src: "/logos/pioneer.svg", stage: "verify · distill" },
-];
+type Item = { name: string; src?: string };
 
 const CLIENTS: Item[] = [
   { name: "Claude Code", src: "/logos/claude.svg" },
@@ -57,20 +46,7 @@ function Mark({ item, size = 20 }: { item: Item; size?: number }) {
 export function Stack() {
   return (
     <section className="bg-[#0a0509] px-6 pb-20 pt-4 sm:px-10">
-      <div className="mx-auto max-w-5xl">
-        <div className="flex flex-wrap items-center gap-x-10 gap-y-6">
-          {STACK.map((s) => (
-            <div key={s.name} className="flex items-center gap-2.5">
-              <Mark item={s} />
-              <span className="text-[15px] font-medium text-white/80">{s.name}</span>
-              {s.stage && <span className="text-[13px] text-white/30">{s.stage}</span>}
-            </div>
-          ))}
-        </div>
-
-      </div>
-
-      <div className="mx-auto mt-12 max-w-5xl border-t border-white/10 px-0 pt-8">
+      <div className="mx-auto max-w-5xl px-0">
         <p className="px-6 text-[15px] text-white/45 sm:px-0">Speaks to any MCP client</p>
       </div>
 
