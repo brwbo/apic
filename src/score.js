@@ -50,18 +50,36 @@ export async function groundTruth(baseUrl = config.target.url) {
   return ops
 }
 
-/** Match an emitted tool to a ground-truth op by the nouns and verbs in its name. */
+/**
+ * Match an emitted tool to one ground-truth op. Deliberately strict: a tool
+ * claims exactly one op, and an inflated recall number is worse than none.
+ */
+const VERB_METHOD = { create: ['PUT', 'POST'], add: ['PUT', 'POST'], update: ['POST', 'PUT'], edit: ['POST', 'PUT'], delete: ['DELETE'], remove: ['DELETE'], move: ['POST'], assign: ['PUT'], mark: ['POST'] }
+
+function parse(tool) {
+  const words = (tool.name || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z]+/).filter(Boolean)
+  return { verb: words[0], noun: words.slice(1).join('') }
+}
+
 function matches(tool, op) {
-  const hay = `${op.summary} ${op.path} ${op.method}`.toLowerCase()
-  const words = (tool.name || '').replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 2)
-  if (!words.length) return false
-  const verbHit = words.some((w) => hay.includes(w) || (w === 'create' && op.method === 'PUT'))
-  const nounHit = words.some((w) => op.path.includes(w) || op.path.includes(w.replace(/s$/, '')))
-  return verbHit && nounHit
+  const { verb, noun } = parse(tool)
+  if (!verb || !noun) return false
+  const methods = VERB_METHOD[verb]
+  if (!methods || !methods.includes(op.method)) return false
+  // the noun must be the LAST resource segment of the path, not merely present
+  const segs = op.path.split('/').filter((s) => s && !s.startsWith('{'))
+  const last = segs[segs.length - 1] || ''
+  return last === noun || last === noun + 's' || last.replace(/s$/, '') === noun
 }
 
 export function score(tools, truth) {
-  const found = truth.filter((op) => tools.some((t) => matches(t, op)))
+  // one tool claims at most one op, so recall cannot exceed the tool count
+  const claimed = new Set()
+  for (const t of tools) {
+    const op = truth.find((o) => !claimed.has(o.id) && matches(t, o))
+    if (op) claimed.add(op.id)
+  }
+  const found = truth.filter((op) => claimed.has(op.id))
   const real = tools.filter((t) => truth.some((op) => matches(t, op)))
   return {
     recall: { hit: found.length, total: truth.length },

@@ -1,0 +1,45 @@
+{
+  "app": "vikunja",
+  "target": "http://localhost:3456",
+  "generatedBy": "apic",
+  "tools": [
+    {
+      "name": "createLabel",
+      "description": "NEW LABEL in the target app. Observed effect: creation.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "labelTitle": {
+            "type": "string",
+            "description": "Title"
+          }
+        },
+        "required": []
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:3456/labels",
+        "click": "NEW LABEL",
+        "fields": [
+          {
+            "selector": "#labelTitle",
+            "schemaKey": "labelTitle"
+          }
+        ],
+        "submit": true,
+        "expect": "creation"
+      },
+      "provenance": {
+        "evidence": {
+          "added": [
+            "a||apic probe 42656",
+            "div|status|Success\nThe label was successfully created."
+          ],
+          "removed": [],
+          "from": "/labels",
+          "to": "/labels"
+        },
+        "discoveredBy": "heuristic"
+      }
+    }
+  ]
+}
