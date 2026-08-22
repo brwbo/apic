@@ -1,0 +1,25 @@
+{
+  "searchResults": [
+    {
+      "url": "https://www.airbnb.co.uk/rooms/1420214676706552637?check_in=2026-09-10&check_out=2026-09-12&search_mode=regular_search&category_tag=Tag%3A8678&photo_id=2294152516&source_impression_id=p3_1787423827_P3qowqFUdmqT6lCq&previous_page_section_name=1000&federated_search_id=46ed6ee3-394a-4d73-b576-6b755d92bc31",
+      "name": "Room in Creative & Friendly Hackney Warehouse",
+      "accommodationType": "Room in Greater London",
+      "details": "Guest favourite",
+      "price": "£80"
+    },
+    {
+      "url": "https://www.airbnb.co.uk/rooms/868739075968967196?check_in=2026-09-10&check_out=2026-09-12&search_mode=regular_search&source_impression_id=p3_1787423827_P3z7kwCVHImPgnOX&previous_page_section_name=1000&federated_search_id=46ed6ee3-394a-4d73-b576-6b755d92bc31",
+      "name": "Dream Loft by Battersea Park, Free Parking",
+      "accommodationType": "Home in Greater London",
+      "details": "Guest favourite",
+      "price": "£347"
+    },
+    {
+      "url": "https://www.airbnb.co.uk/rooms/683246711309685944?check_in=2026-09-10&check_out=2026-09-12&search_mode=regular_search&source_impression_id=p3_1787423827_P3Ew6bnsVeI4x0BM&previous_page_section_name=1000&federated_search_id=46ed6ee3-394a-4d73-b576-6b755d92bc31",
+      "name": "Modern, 1-bedroom flat. Deptford, London (zone 2)",
+      "accommodationType": "Apartment in Greater London",
+      "details": "Guest favourite",
+      "price": "£227"
+    }
+  ]
+}

@@ -151,6 +151,111 @@ function requiredArgs(tool, args) {
   return (tool.inputSchema?.required || []).filter((key) => args[key] === undefined || args[key] === '')
 }
 
+/** Strictly accept portable ISO dates; locale-formatted dates are ambiguous. */
+export function dateRange(checkIn, checkOut) {
+  const parse = (value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return null
+    const date = new Date(`${value}T12:00:00Z`)
+    return Number.isNaN(date.valueOf()) ? null : date
+  }
+  const start = parse(checkIn), end = parse(checkOut)
+  return start && end && end > start ? { start, end } : null
+}
+
+export function defaultDateRange() {
+  const start = new Date()
+  start.setUTCHours(12, 0, 0, 0)
+  start.setUTCDate(start.getUTCDate() + 14)
+  const end = new Date(start)
+  end.setUTCDate(end.getUTCDate() + 2)
+  const iso = (date) => date.toISOString().slice(0, 10)
+  return { checkIn: iso(start), checkOut: iso(end) }
+}
+
+const dateTokens = (date) => [
+  String(date.getUTCDate()),
+  date.toLocaleString('en-GB', { month: 'long', timeZone: 'UTC' }).toLowerCase(),
+  String(date.getUTCFullYear()),
+]
+
+async function clickCalendarDate(page, date, phase) {
+  const tokens = dateTokens(date)
+  return page.evaluate(({ tokens, phase }) => {
+    const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 }
+    const candidates = [...document.querySelectorAll('button, [role="button"]')].filter(visible)
+    const matches = (el) => (el.getAttribute('aria-label') || el.innerText || '').toLowerCase()
+    const exact = candidates.find((el) => {
+      const label = matches(el)
+      return tokens.every((token) => new RegExp(`(?:^|[^a-z0-9])${token}(?:$|[^a-z0-9])`, 'i').test(label)) &&
+        new RegExp(`select as check[- ]?${phase} date`, 'i').test(label)
+    })
+    const fallback = candidates.find((el) => {
+      const label = matches(el)
+      return tokens.every((token) => new RegExp(`(?:^|[^a-z0-9])${token}(?:$|[^a-z0-9])`, 'i').test(label))
+    })
+    const target = exact || fallback
+    if (!target) return false
+    target.click()
+    return true
+  }, { tokens, phase }).catch(() => false)
+}
+
+async function nextCalendarMonth(page) {
+  return page.evaluate(() => {
+    const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 }
+    const target = [...document.querySelectorAll('button, [role="button"]')].filter(visible).find((el) =>
+      /(?:next|forward|later).*month|month.*(?:next|forward|later)/i.test(el.getAttribute('aria-label') || el.innerText || ''))
+    if (!target) return false
+    target.click()
+    return true
+  }).catch(() => false)
+}
+
+/** Choose a date range only when a public calendar is already exposed by a prior field. */
+export async function selectDateRange(page, checkIn, checkOut) {
+  const range = dateRange(checkIn, checkOut)
+  if (!range) return false
+  for (const [date, phase] of [[range.start, 'in'], [range.end, 'out']]) {
+    let chosen = false
+    for (let month = 0; month < 18 && !chosen; month++) {
+      chosen = await clickCalendarDate(page, date, phase)
+      if (!chosen && !(await nextCalendarMonth(page))) break
+      if (!chosen) await page.waitForTimeout(250)
+    }
+    if (!chosen) return false
+    await page.waitForTimeout(250)
+  }
+  return true
+}
+
+/** Select an adult count from a guest panel exposed by a staged public form. */
+export async function selectGuests(page, guests) {
+  const count = Number(guests)
+  if (!Number.isInteger(count) || count < 1 || count > 9) return false
+  const opened = await page.evaluate(() => {
+    const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 }
+    const target = [...document.querySelectorAll('button, [role="button"]')].filter(visible).find((el) =>
+      /(?:who|guests?|travellers?).*(?:add|select)|(?:add|select).*(?:guests?|travellers?)/i.test(el.getAttribute('aria-label') || el.innerText || ''))
+    if (!target) return false
+    target.click()
+    return true
+  }).catch(() => false)
+  if (!opened) return false
+  await page.waitForTimeout(250)
+  for (let i = 0; i < count; i++) {
+    const increased = await page.evaluate(() => {
+      const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 }
+      const target = [...document.querySelectorAll('button, [role="button"]')].filter(visible).find((el) =>
+        /(?:increase|add).*(?:adults?|guests?|travellers?)/i.test(el.getAttribute('aria-label') || el.innerText || ''))
+      if (!target) return false
+      target.click()
+      return true
+    }).catch(() => false)
+    if (!increased) return false
+  }
+  return true
+}
+
 /**
  * Run a compiled read tool. Two shapes of recipe:
  *
@@ -183,6 +288,12 @@ export async function replayRead(tool, args = {}, { session = null, headless = t
           const option = page.locator('[role="option"]:visible, [data-testid*="suggestion"]:visible').first()
           if (await option.count().catch(() => 0)) await option.click({ timeout: 3000 }).catch(() => {})
         }
+      }
+      if (recipe.stages?.dates && !(await selectDateRange(page, args.checkIn, args.checkOut))) {
+        return { ok: false, kind: 'read', error: 'the compiled public calendar no longer accepted the requested date range' }
+      }
+      if (recipe.stages?.guests && !(await selectGuests(page, args.guests))) {
+        return { ok: false, kind: 'read', error: 'the compiled public guest selector no longer accepted the requested count' }
       }
       await page.waitForTimeout(1500)
       await submitSearch(page, recipe.submit)
@@ -227,7 +338,7 @@ async function submitSearch(page, label) {
   if (label) {
     const clicked = await page.evaluate((want) => {
       const el = [...document.querySelectorAll('button, a[href], [role="button"], input[type="submit"]')]
-        .find((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && ((e.value || e.innerText || '').trim().toLowerCase() === want.toLowerCase()) })
+        .find((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && ((e.getAttribute('aria-label') || e.value || e.innerText || '').trim().toLowerCase() === want.toLowerCase()) })
       if (!el) return false
       el.click()
       return true

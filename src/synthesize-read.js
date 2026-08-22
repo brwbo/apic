@@ -111,6 +111,13 @@ export async function inferRowSchema(candidate, page, context) {
     used.add(key)
     return true
   })
+  // A rendered currency value is factual structure, not a semantic guess. If
+  // the model focuses on a product URL or title, preserve the first recurring
+  // currency selector so price comparison remains possible on any catalogue.
+  const money = candidate.leaves.find((f) => !f.attr && /(?:£|\$|€)\s?\d/.test(f.sample))
+  if (!out.fields.some((f) => /price|cost|fare/i.test(f.name)) && money) {
+    out.fields.push({ name: 'price', selector: money.selector, attr: null, description: 'The displayed price for this result.', required: false })
+  }
   // Card markup is often inconsistent around badges, but a rendered currency
   // amount is an unambiguous value. Preserve it as a row-text derivation when
   // no stable element selector survived; this lets an agent compare prices

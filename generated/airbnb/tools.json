@@ -1,0 +1,180 @@
+{
+  "app": "airbnb",
+  "target": "https://www.airbnb.co.uk/",
+  "generatedBy": "apic",
+  "tools": [
+    {
+      "name": "searchResults",
+      "kind": "read",
+      "description": "Schema for Airbnb London holiday rental listings including name, url, accommodation type, details, price, and rating. Returns url, name, accommodationType, details, price per row.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Where"
+          },
+          "checkIn": {
+            "type": "string",
+            "description": "Check-in date (YYYY-MM-DD)"
+          },
+          "checkOut": {
+            "type": "string",
+            "description": "Check-out date (YYYY-MM-DD)"
+          },
+          "guests": {
+            "type": "string",
+            "description": "Number of adult guests (1-9)"
+          }
+        },
+        "required": [
+          "query",
+          "checkIn",
+          "checkOut",
+          "guests"
+        ]
+      },
+      "rowSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL to the accommodation listing, required:true."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name or title of the accommodation, required:true."
+          },
+          "accommodationType": {
+            "type": "string",
+            "description": "Type of accommodation (e.g., Room, Home) as shown in the card title."
+          },
+          "details": {
+            "type": "string",
+            "description": "Accommodation details such as number of beds or bedrooms."
+          },
+          "price": {
+            "type": "string",
+            "description": "The first displayed currency amount for this item."
+          }
+        },
+        "required": [
+          "url",
+          "name",
+          "accommodationType",
+          "details"
+        ]
+      },
+      "recipe": {
+        "via": "form",
+        "origin": "https://www.airbnb.co.uk",
+        "seedUrl": "https://www.airbnb.co.uk/",
+        "submit": "Search",
+        "inputs": [
+          {
+            "selector": "[name=\"query\"]:visible",
+            "schemaKey": "query",
+            "selectSuggestion": true
+          }
+        ],
+        "stages": {
+          "dates": true,
+          "guests": true
+        },
+        "params": {
+          "query": "Where",
+          "checkIn": "Check-in date (YYYY-MM-DD)",
+          "checkOut": "Check-out date (YYYY-MM-DD)",
+          "guests": "Number of adult guests (1-9)"
+        },
+        "container": "div.gsgwcjk.atm_9s_11p5wf0.atm_d5_j5tqy.atm_84_1tcgj5g.atm_n5_1ylpe5n.atm_dz_buh4zo.dir.dir-ltr:has(> div.c965t3n.atm_9s_11p5wf0.atm_dz_1osqo2v.dir.dir-ltr [data-testid=\"listing-card-title\"]:nth-of-type(1))",
+        "rowSelector": "div.c965t3n.atm_9s_11p5wf0.atm_dz_1osqo2v.dir.dir-ltr",
+        "fields": [
+          {
+            "name": "url",
+            "selector": "a.l1lx1n3h.atm_npmupv_14b5rvc_10saat9.atm_4s4swg_18xq13z_10saat9.atm_u9em2p_1r3889l_10saat9.atm_1ezpcqw_1u41vd9_10saat9.atm_fyjbsv_c4n71i_10saat9.atm_1rna0z7_1uk391_10saat9.bn2bl2p.atm_5j_18uhwh1.atm_9s_1ulexfb.atm_e2_1osqo2v.atm_f9_idpfg4.atm_mk_stnw88.atm_tk_idpfg4.atm_vy_1osqo2v.atm_26_1j28jx2.atm_3f_glywfm.atm_kd_glywfm.atm_3f_glywfm_jo46a5.atm_l8_idpfg4_jo46a5.atm_gi_idpfg4_jo46a5.atm_3f_glywfm_1icshfk.atm_kd_glywfm_19774hq.atm_uc_1wx0j5_1w3cfyq_oggzyc.atm_70_124fdim_1w3cfyq_oggzyc.atm_uc_glywfm_1w3cfyq_pynvjw.dir.dir-ltr",
+            "attr": "href"
+          },
+          {
+            "name": "name",
+            "selector": "[data-testid=\"listing-card-name\"]",
+            "attr": null
+          },
+          {
+            "name": "accommodationType",
+            "selector": "[data-testid=\"listing-card-title\"]:nth-of-type(1)",
+            "attr": null
+          },
+          {
+            "name": "details",
+            "selector": "span.a8jt5op.atm_3f_idpfg4.atm_7h_hxbz6r.atm_7i_ysn8ba.atm_e2_t94yts.atm_ks_zryt35.atm_l8_idpfg4.atm_mk_stnw88.atm_vv_1q9ccgz.atm_vy_t94yts.dir.dir-ltr:nth-of-type(1)",
+            "attr": null
+          },
+          {
+            "name": "price",
+            "selector": null,
+            "attr": null,
+            "derive": "currency"
+          }
+        ]
+      },
+      "samples": {
+        "query": "London",
+        "checkIn": "2026-09-10",
+        "checkOut": "2026-09-12",
+        "guests": "1"
+      },
+      "provenance": {
+        "evidence": {
+          "control": "Where",
+          "landedAt": "https://www.airbnb.co.uk/s/London/homes?refinement_paths%5B%5D=%2Fhomes&place_id=ChIJdd4hrwug2EcRmSrV3Vo6llI&location_bb=Qk6wez4X1FpCTYouvrPzpw%3D%3D&acp_id=4360b783-7c07-41a0-a227-a17d1c3d3895&date_picker_type=calendar&checkin=2026-09-10&checkout=2026-09-12&search_type=autocomplete_click",
+          "rowsSeen": 19,
+          "why": "list appeared",
+          "sampleRows": [
+            "Guest favouriteGuest favouriteRoom in Greater LondonRoom in Creative & Friendly Hackney Warehouse1 bed1 bed, · 2.5 bathrooms2.5 bathroomsIndividual hostIndividu",
+            "Guest favouriteGuest favouriteHome in Greater LondonDream Loft by Battersea Park, Free Parking1 bedroom1 bedroom, · 1 bed1 bed, · 1 bathroom1 bathroomBusiness h",
+            "Room in Greater LondonLondon Beige Room 11 bed1 bed, · 1 bathroom1 bathroomIndividual hostIndividual host£120 totalShow price breakdown £120 total4.89 out of 5 "
+          ]
+        },
+        "schemaBy": "openai/gpt-4.1-mini",
+        "discoveredBy": "read-probe"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "24 rows, all of url, name, accommodationType, details non-empty",
+        "at": "2026-08-22T18:37:13.893Z",
+        "rows": 24,
+        "sample": [
+          {
+            "url": "https://www.airbnb.co.uk/rooms/1420214676706552637?check_in=2026-09-10&check_out=2026-09-12&search_mode=regular_search&category_tag=Tag%3A8678&photo_id=2294152516&source_impression_id=p3_1787423827_P3qowqFUdmqT6lCq&previous_page_section_name=1000&federated_search_id=46ed6ee3-394a-4d73-b576-6b755d92bc31",
+            "name": "Room in Creative & Friendly Hackney Warehouse",
+            "accommodationType": "Room in Greater London",
+            "details": "Guest favourite",
+            "price": "£80"
+          },
+          {
+            "url": "https://www.airbnb.co.uk/rooms/868739075968967196?check_in=2026-09-10&check_out=2026-09-12&search_mode=regular_search&source_impression_id=p3_1787423827_P3z7kwCVHImPgnOX&previous_page_section_name=1000&federated_search_id=46ed6ee3-394a-4d73-b576-6b755d92bc31",
+            "name": "Dream Loft by Battersea Park, Free Parking",
+            "accommodationType": "Home in Greater London",
+            "details": "Guest favourite",
+            "price": "£347"
+          },
+          {
+            "url": "https://www.airbnb.co.uk/rooms/683246711309685944?check_in=2026-09-10&check_out=2026-09-12&search_mode=regular_search&source_impression_id=p3_1787423827_P3Ew6bnsVeI4x0BM&previous_page_section_name=1000&federated_search_id=46ed6ee3-394a-4d73-b576-6b755d92bc31",
+            "name": "Modern, 1-bedroom flat. Deptford, London (zone 2)",
+            "accommodationType": "Apartment in Greater London",
+            "details": "Guest favourite",
+            "price": "£227"
+          }
+        ],
+        "calledWith": {
+          "query": "London",
+          "checkIn": "2026-09-10",
+          "checkOut": "2026-09-12",
+          "guests": "1"
+        }
+      }
+    }
+  ]
+}

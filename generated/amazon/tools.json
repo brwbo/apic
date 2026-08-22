@@ -1,0 +1,138 @@
+{
+  "app": "amazon",
+  "target": "https://www.amazon.co.uk/",
+  "generatedBy": "apic",
+  "tools": [
+    {
+      "name": "searchResults",
+      "kind": "read",
+      "description": "List of Lynx Africa deodorant products on Amazon.co.uk with details including name, description, rating, rating count, price, and product URL. Returns name, description, url, price per row.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search Amazon.co.uk"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "rowSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Product name or title."
+          },
+          "description": {
+            "type": "string",
+            "description": "Product description or subtitle."
+          },
+          "url": {
+            "type": "string",
+            "description": "Product page URL."
+          },
+          "price": {
+            "type": "string",
+            "description": "The displayed price for this result."
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "url"
+        ]
+      },
+      "recipe": {
+        "via": "form",
+        "origin": "https://www.amazon.co.uk",
+        "seedUrl": "https://www.amazon.co.uk/",
+        "submit": null,
+        "inputs": [
+          {
+            "selector": "[name=\"field-keywords\"]:visible",
+            "schemaKey": "query",
+            "selectSuggestion": false
+          }
+        ],
+        "params": {
+          "query": "Search Amazon.co.uk"
+        },
+        "container": "div.s-main-slot.s-result-list.s-search-results.sg-row:has(> [data-component-type=\"s-search-result\"] a.a-link-normal.s-no-outline)",
+        "rowSelector": "[data-component-type=\"s-search-result\"]",
+        "fields": [
+          {
+            "name": "name",
+            "selector": "h2.a-size-base-plus.a-spacing-none.a-color-base.a-text-normal",
+            "attr": null
+          },
+          {
+            "name": "description",
+            "selector": "a.a-link-normal.s-line-clamp-3.s-link-style.a-text-normal",
+            "attr": null
+          },
+          {
+            "name": "url",
+            "selector": "a.a-link-normal.s-no-outline",
+            "attr": "href"
+          },
+          {
+            "name": "price",
+            "selector": "a.a-link-normal.s-no-hover.s-underline-text.s-underline-link-text.s-link-style.a-text-normal",
+            "attr": null
+          }
+        ]
+      },
+      "samples": {
+        "query": "lynx africa deodorant"
+      },
+      "provenance": {
+        "evidence": {
+          "control": "Search Amazon.co.uk",
+          "landedAt": "https://www.amazon.co.uk/s?k=lynx+africa+deodorant&crid=B7UI56JKU370&sprefix=lynx+africa+deodorant%2Caps%2C92&ref=nb_sb_noss_1",
+          "rowsSeen": 60,
+          "why": "list appeared",
+          "sampleRows": [
+            "SponsoredSponsored You’re seeing this ad based on the product’s relevance to your search query.Let us know LynxAfrica 3 Pack Bundle of 200ml Anti-Perspirant Aer",
+            "SponsoredSponsored You’re seeing this ad based on the product’s relevance to your search query.Let us know Lynx12 Hour Refreshing Africa Shower Gel, 500 with Ly",
+            "SponsoredSponsored You’re seeing this ad based on the product’s relevance to your search query.Let us know Lynx12 Hour Refreshing Africa Shower Gel, 500 with Ly"
+          ]
+        },
+        "schemaBy": "openai/gpt-4.1-mini",
+        "discoveredBy": "read-probe"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "40 rows, all of name, description, url non-empty",
+        "at": "2026-08-22T18:53:10.690Z",
+        "rows": 40,
+        "sample": [
+          {
+            "name": "Africa 3 Pack Bundle of 200ml Anti-Perspirant Aerosol, 250ml XXL Body Spray & 50ml Shower Gel Classic Masculine Scent for 48 hours of Long Lasting Freshness",
+            "description": "Africa 3 Pack Bundle of 200ml Anti-Perspirant Aerosol, 250ml XXL Body Spray & 50ml Shower Gel Classic Masculine Scent for 48 hours of Long Lasting Freshness",
+            "url": "https://www.amazon.co.uk/sspa/click?ie=UTF8&spc=MTo0NzI4MzU4NjQyNjA0MjAwOjE3ODc0MjQ3ODM6c3BfYXRmOjMwMTE2Mjc3OTA1OTMzMjo6MDo6&url=%2FLynx-Anti-Perspirant-Aerosol-Masculine-Freshness%2Fdp%2FB0FGDHN49D%2Fref%3Dsr_1_1_sspa%3Fcrid%3D29M3U4II24F94%26dib%3DeyJ2IjoiMSJ9.mITDHttkbXTsgyztGOW8n0_JNAteOHoI-sy1NIWdCDPH31Z7vPBDZ8m0Sc0uIBb5wqzcbQHkFmrJPJV39oDerlcVbb4bS2j3THAlb7TEhtkZH2sH0_ZjmRMDK02sAn5ehLZN6vPmuckjRkkQ8XXGMrjaz8d0SEqTJEKNdpGsOtog-1yf5cFFOyEwieRFUvtSpL4HOuy8kfD89WJRBnkNZEb1jxi-wRPWZ7bHchbVzBae7ji4zNOXrOwSHl2A55mKbmRr1qryTgVYyxcrCo6lYgujHv-JPkRiKAbMkWBchek.uLsFipPfTMjqd4w5Z8KsAAywkEZ2IIG8nykUV1382_4%26dib_tag%3Dse%26keywords%3Dlynx%2Bafrica%2Bdeodorant%26qid%3D1787424783%26sprefix%3Dlynx%2Bafrica%2Bdeodorant%252Caps%252C92%26sr%3D8-1-spons%26aref%3DVeWnpGRuXn%26sp_csd%3Dd2lkZ2V0TmFtZT1zcF9hdGY%26psc%3D1&aref=VeWnpGRuXn&sp_cr=ZAZ",
+            "price": "£14.99£14.99 (£29.98£29.98/l)"
+          },
+          {
+            "name": "12 Hour Refreshing Africa Shower Gel, 500 with Lynx 48 Hour Fresh Body Spray 250ml Leaving you smelling great, Dermatologically Tested, Keep Smelling Irresistible!",
+            "description": "12 Hour Refreshing Africa Shower Gel, 500 with Lynx 48 Hour Fresh Body Spray 250ml Leaving you smelling great, Dermatologically Tested, Keep Smelling Irresistible!",
+            "url": "https://www.amazon.co.uk/sspa/click?ie=UTF8&spc=MTo0NzI4MzU4NjQyNjA0MjAwOjE3ODc0MjQ3ODM6c3BfYXRmOjMwMDI1MTcwODkzNjczMjo6MDo6&url=%2FLynx-Refreshing-smelling-Dermatologically-Irresistible%2Fdp%2FB09BVNVQ12%2Fref%3Dsr_1_2_sspa%3Fcrid%3D29M3U4II24F94%26dib%3DeyJ2IjoiMSJ9.mITDHttkbXTsgyztGOW8n0_JNAteOHoI-sy1NIWdCDPH31Z7vPBDZ8m0Sc0uIBb5wqzcbQHkFmrJPJV39oDerlcVbb4bS2j3THAlb7TEhtkZH2sH0_ZjmRMDK02sAn5ehLZN6vPmuckjRkkQ8XXGMrjaz8d0SEqTJEKNdpGsOtog-1yf5cFFOyEwieRFUvtSpL4HOuy8kfD89WJRBnkNZEb1jxi-wRPWZ7bHchbVzBae7ji4zNOXrOwSHl2A55mKbmRr1qryTgVYyxcrCo6lYgujHv-JPkRiKAbMkWBchek.uLsFipPfTMjqd4w5Z8KsAAywkEZ2IIG8nykUV1382_4%26dib_tag%3Dse%26keywords%3Dlynx%2Bafrica%2Bdeodorant%26qid%3D1787424783%26sprefix%3Dlynx%2Bafrica%2Bdeodorant%252Caps%252C92%26sr%3D8-2-spons%26aref%3Dm5E37vL5tR%26sp_csd%3Dd2lkZ2V0TmFtZT1zcF9hdGY%26psc%3D1&aref=m5E37vL5tR&sp_cr=ZAZ",
+            "price": "£9.99£9.99 (£39.96£39.96/l)"
+          },
+          {
+            "name": "12 Hour Refreshing Africa Shower Gel, 500 with Lynx 72 Hour Fresh Anti-Perspirant 250ml Leaving you smelling great, Dermatologically Tested, Keep Smelling Irresistible!",
+            "description": "12 Hour Refreshing Africa Shower Gel, 500 with Lynx 72 Hour Fresh Anti-Perspirant 250ml Leaving you smelling great, Dermatologically Tested, Keep Smelling Irresistible!",
+            "url": "https://www.amazon.co.uk/sspa/click?ie=UTF8&spc=MTo0NzI4MzU4NjQyNjA0MjAwOjE3ODc0MjQ3ODM6c3BfYXRmOjMwMDI1MTcxODg4NTQzMjo6MDo6&url=%2FLynx-Refreshing-Anti-Perspirant-Dermatologically-Irresistible%2Fdp%2FB09BZBYZBH%2Fref%3Dsr_1_3_sspa%3Fcrid%3D29M3U4II24F94%26dib%3DeyJ2IjoiMSJ9.mITDHttkbXTsgyztGOW8n0_JNAteOHoI-sy1NIWdCDPH31Z7vPBDZ8m0Sc0uIBb5wqzcbQHkFmrJPJV39oDerlcVbb4bS2j3THAlb7TEhtkZH2sH0_ZjmRMDK02sAn5ehLZN6vPmuckjRkkQ8XXGMrjaz8d0SEqTJEKNdpGsOtog-1yf5cFFOyEwieRFUvtSpL4HOuy8kfD89WJRBnkNZEb1jxi-wRPWZ7bHchbVzBae7ji4zNOXrOwSHl2A55mKbmRr1qryTgVYyxcrCo6lYgujHv-JPkRiKAbMkWBchek.uLsFipPfTMjqd4w5Z8KsAAywkEZ2IIG8nykUV1382_4%26dib_tag%3Dse%26keywords%3Dlynx%2Bafrica%2Bdeodorant%26qid%3D1787424783%26sprefix%3Dlynx%2Bafrica%2Bdeodorant%252Caps%252C92%26sr%3D8-3-spons%26aref%3DDYn3baB9Lt%26sp_csd%3Dd2lkZ2V0TmFtZT1zcF9hdGY%26psc%3D1&aref=DYn3baB9Lt&sp_cr=ZAZ",
+            "price": "£9.99£9.99 (£5.00£5.00/count)"
+          }
+        ],
+        "calledWith": {
+          "query": "lynx africa deodorant"
+        }
+      }
+    }
+  ]
+}

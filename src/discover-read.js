@@ -27,7 +27,7 @@ import { distill } from './distill.js'
 import { adjudicate, shot, visionAvailable } from './perceive.js'
 import { emit } from './emit.js'
 import { inferRowSchema, toTool } from './synthesize-read.js'
-import { openRead, visit, replayRead, verifyRead, relaxReadSchema, ChallengeError } from './replay-read.js'
+import { defaultDateRange, openRead, visit, replayRead, verifyRead, relaxReadSchema, selectDateRange, selectGuests, ChallengeError } from './replay-read.js'
 
 const SEARCHY = /search|postcode|post code|zip|location|address|where|find/i
 const NOT_A_FILTER = /^(log ?in|sign ?up|download|get started|view all|skip to|cookie|privacy|terms|conditions|accessibility|careers|about|help|contact|next|previous|close|back)/i
@@ -82,8 +82,18 @@ export async function lists(page) {
         if (/class\*="ccl-"/.test(sel)) sel = structural(el)
         const t = (el.textContent || '').trim().replace(/\s+/g, ' ')
         const href = el.tagName === 'A' ? el.getAttribute('href') : null
+        const primaryLabel = Boolean(href) || /^H[1-6]$/.test(el.tagName)
         if (href) out.push({ selector: sel, attr: 'href', sample: href.slice(0, 120) })
-        if (!t || t.length > 120) continue
+        if (!t || (t.length > 120 && !primaryLabel)) continue
+        // A card's primary label is often a link containing styled spans. Its
+        // href and its text are two different useful columns; do not throw the
+        // label away merely because it has child markup.
+        if (href && t.length > 2) out.push({ selector: sel, attr: null, sample: t.slice(0, 120) })
+        // Product, listing and article cards frequently put the primary title
+        // in a heading with an unstyled span. A heading's combined text is the
+        // label even when its child text nodes would otherwise mark it as a
+        // wrapper.
+        if (/^H[1-6]$/.test(el.tagName) && t.length > 2) out.push({ selector: sel, attr: null, sample: t.slice(0, 120) })
         if ([...el.children].some((c) => (c.textContent || '').trim())) continue
         out.push({ selector: sel, attr: null, sample: t.slice(0, 120) })
       }
@@ -95,17 +105,49 @@ export async function lists(page) {
       if (el.closest('footer, nav, aside, [role="dialog"]')) continue
       const container = stable(el)
       if (!container) continue
-      const kids = [...el.children].filter((k) => {
+      let kids = [...el.children].filter((k) => {
         const r = k.getBoundingClientRect()
         return r.width > 60 && r.height > 30 && (k.textContent || '').trim().length > 10
       })
       if (kids.length < 3) continue
+      // Search pages commonly interleave product cards with notices, ads and
+      // carousels under one parent. A repeated semantic attribute is stronger
+      // evidence of a row type than shared styling classes, which often differ
+      // exactly where an item is sponsored. Keep the largest true cohort.
+      const groups = new Map()
+      for (const kid of kids) {
+        const type = kid.getAttribute('data-component-type')
+        if (type) groups.set(type, [...(groups.get(type) || []), kid])
+      }
+      const cohort = [...groups.values()].sort((a, b) => b.length - a.length)[0]
+      if (cohort?.length >= 3) kids = cohort
       const rows = kids.map((k) => (k.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 160))
       const avg = rows.reduce((s, t) => s + t.length, 0) / rows.length
       if (avg < 12) continue
-      const rowSelector = stable(kids[0])
+      const component = kids[0].getAttribute('data-component-type')
+      const rowSelector = component && kids.every((kid) => kid.getAttribute('data-component-type') === component)
+        ? `[data-component-type="${CSS.escape(component).replace(/\\/g, '')}"]`
+        : stable(kids[0])
         || (kids.every((k) => k.tagName === kids[0].tagName) ? kids[0].tagName.toLowerCase() : null)
-      const recurringLeaves = leaves(kids[0]).filter((l) => kids.slice(1, 3).some((k) => k.querySelector(l.selector)))
+      // The first cards in a result grid are often sponsored or editorial and
+      // have a different markup shape. Choose the three most similar cards as
+      // the schema sample: the dominant repeated layout is a stronger fact
+      // than whichever card happened to be rendered first.
+      const layouts = kids.map(leaves)
+      const key = (leaf) => `${leaf.selector}|${leaf.attr || ''}`
+      const overlap = (one, two) => {
+        const left = new Set(one.map(key)), right = new Set(two.map(key))
+        const shared = [...left].filter((item) => right.has(item)).length
+        return shared / Math.max(1, left.size + right.size - shared)
+      }
+      const pivot = layouts.reduce((best, layout, index) => {
+        const score = layouts.reduce((sum, other) => sum + overlap(layout, other), 0)
+        return score > best.score ? { index, score } : best
+      }, { index: 0, score: -1 }).index
+      const sampleIndexes = layouts.map((layout, index) => ({ index, score: overlap(layouts[pivot], layout) }))
+        .sort((a, b) => b.score - a.score).slice(0, 3).map(({ index }) => index)
+      const fieldRows = sampleIndexes.map((index) => layouts[index])
+      const recurringLeaves = fieldRows[0].filter((leaf) => fieldRows.slice(1).some((row) => row.some((other) => key(other) === key(leaf))))
       // Component classes recur across unrelated carousels. Scope the recorded
       // container to a field witnessed inside this row, preferring test IDs;
       // otherwise replay's querySelector would take the first category carousel
@@ -126,7 +168,7 @@ export async function lists(page) {
         // the observed per-row columns, rather than revisiting the seed URL and
         // accidentally asking a search-result selector to describe the home
         // page again.
-        fieldRows: kids.slice(0, 3).map((k) => leaves(k)),
+        fieldRows,
         score: kids.length * Math.min(Math.round(avg), 120),
       })
     }
@@ -150,7 +192,7 @@ async function probes(page, maxControls = Number(process.env.APIC_READ_CONTROLS 
 }
 
 /** Did this probe surface a collection? A container that is new, longer, or now holds other rows. */
-function changed(before, after) {
+function changed(before, after, query = null) {
   const prior = new Map(before.map((l) => [l.container, l]))
   const moved = after
     .map((l) => {
@@ -166,7 +208,19 @@ function changed(before, after) {
     // row collection a tool can replay. Prefer a bounded, denser result list
     // over a four-item promotion or the document-scale wrapper around it.
     .filter((l) => l.n <= 60)
-  return moved.sort((a, b) => (b.n - a.n) || (b.leaves.length - a.leaves.length) || (b.score - a.score))[0] || null
+  // A generic homepage carousel often has more cards than the result list.
+  // When this is a text search, rank a changed collection that echoes the
+  // search above a larger unrelated one. If none echo it, return the best
+  // candidate so the caller can reject it with a useful reason.
+  const relevant = query ? moved.filter((item) => relatedToQuery(item, query)) : []
+  return (relevant.length ? relevant : moved)
+    .sort((a, b) => (b.n - a.n) || (b.leaves.length - a.leaves.length) || (b.score - a.score))[0] || null
+}
+
+/** A changed carousel is not a search result if it contains none of the query. */
+export function relatedToQuery(hit, query) {
+  const terms = String(query).toLowerCase().match(/[a-z]{4,}/g) || []
+  return !terms.length || hit.rows.some((row) => terms.some((term) => row.toLowerCase().includes(term)))
 }
 
 /**
@@ -222,11 +276,11 @@ export async function discoverRead(page, seed, { log = () => {}, query = process
     }
     const submit = await page.evaluate(() => [...document.querySelectorAll('button, a[href], [role="button"], input[type="submit"]')]
       .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 })
-      .map((el) => (el.value || el.innerText || '').trim())
+      .map((el) => (el.getAttribute('aria-label') || el.value || el.innerText || '').trim())
       .find((label) => /^(see prices|get .*estimate|calculate|search|go|find)$/i.test(label)) || null)
     if (submit) await page.evaluate((label) => {
       const el = [...document.querySelectorAll('button, a[href], [role="button"], input[type="submit"]')]
-        .find((node) => { const r = node.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (node.value || node.innerText || '').trim() === label })
+        .find((node) => { const r = node.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (node.getAttribute('aria-label') || node.value || node.innerText || '').trim() === label })
       el?.click()
     }, submit).catch(() => {})
     else await page.keyboard.press('Enter').catch(() => {})
@@ -248,26 +302,46 @@ export async function discoverRead(page, seed, { log = () => {}, query = process
     const option = page.locator('[role="option"]:visible, [data-testid*="suggestion"]:visible').first()
     const selectSuggestion = Boolean(await option.count().catch(() => 0))
     if (selectSuggestion) await option.click({ timeout: 3000 }).catch(() => {})
+    // Staged consumer forms reveal their calendar only after a destination is
+    // selected. Probe it now, rather than declaring the first text box to be
+    // the entire search. The recipe records a capability, never a site name.
+    const dates = defaultDateRange()
+    const hasDates = await selectDateRange(page,
+      process.env.APIC_READ_CHECK_IN || dates.checkIn,
+      process.env.APIC_READ_CHECK_OUT || dates.checkOut)
+    const guests = process.env.APIC_READ_GUESTS || '1'
+    const hasGuests = hasDates && await selectGuests(page, guests)
     const submit = await page.evaluate(() => [...document.querySelectorAll('button, a[href], [role="button"]')]
       .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 })
-      .map((e) => (e.value || e.innerText || '').trim()).find((t) => /^(search|go|find)$/i.test(t)) || null)
+      .map((e) => (e.getAttribute('aria-label') || e.value || e.innerText || '').trim()).find((t) => /^(search|go|find)$/i.test(t)) || null)
     await page.evaluate((want) => {
-      const el = [...document.querySelectorAll('button, a[href], [role="button"]')].find((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (e.value || e.innerText || '').trim() === want })
+      const el = [...document.querySelectorAll('button, a[href], [role="button"]')].find((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && (e.getAttribute('aria-label') || e.value || e.innerText || '').trim() === want })
       el?.click()
     }, submit).catch(() => {})
     if (!submit) await page.keyboard.press('Enter').catch(() => {})
     await page.waitForTimeout(5000)
     await page.evaluate(() => window.scrollTo(0, 1000)).catch(() => {})
     await page.waitForTimeout(1500)
-    const hit = changed(before, await lists(page))
-    log(`  search "${label}" <- ${query} : ${hit ? `${hit.why}, ${hit.n} rows` : 'no collection surfaced'}`)
+    const observed = changed(before, await lists(page), query)
+    const hit = observed && relatedToQuery(observed, query) ? observed : null
+    log(`  search "${label}" <- ${query} : ${hit ? `${hit.why}, ${hit.n} rows` : observed ? 'changed rows did not match the query' : 'no collection surfaced'}`)
     const judged = await judge(hit, label, beforeFrame)
-    if (judged) out.push({ candidate: judged.hit, context: { title: await page.title(), url: page.url(), why: judged.hit.why, intent: `search results for ${label}`, perception: judged.perception },
-      recipe: { via: 'form', origin: new URL(seed.url).origin, seedUrl: seed.url, submit, inputs: [{ selector: f.selector, schemaKey: 'query', selectSuggestion }], params: { query: label || 'search query' } },
-      samples: { query }, evidence: { control: label, landedAt: page.url() } })
+    if (judged) {
+      const checkIn = process.env.APIC_READ_CHECK_IN || dates.checkIn
+      const checkOut = process.env.APIC_READ_CHECK_OUT || dates.checkOut
+      out.push({ candidate: judged.hit, context: { title: await page.title(), url: page.url(), why: judged.hit.why, intent: `search results for ${label}`, perception: judged.perception },
+        recipe: { via: 'form', origin: new URL(seed.url).origin, seedUrl: seed.url, submit,
+          inputs: [{ selector: f.selector, schemaKey: 'query', selectSuggestion }],
+          ...(hasDates ? { stages: { dates: true, ...(hasGuests ? { guests: true } : {}) } } : {}),
+          params: { query: label || 'search query', ...(hasDates ? { checkIn: 'Check-in date (YYYY-MM-DD)', checkOut: 'Check-out date (YYYY-MM-DD)' } : {}), ...(hasGuests ? { guests: 'Number of adult guests (1-9)' } : {}) } },
+        samples: { query, ...(hasDates ? { checkIn, checkOut } : {}), ...(hasGuests ? { guests } : {}) }, evidence: { control: label, landedAt: page.url() } })
+    }
   }
 
-  for (const c of controls) {
+  // Once a typed search has produced a tool, homepage "See all" links and
+  // promotional carousels are not an alternative read surface. They are a
+  // common source of unrelated rows, so retain filters only as a fallback.
+  for (const c of (out.length ? [] : controls)) {
     await visit(page, seed.url)
     const before = await lists(page)
     const beforeFrame = visionAvailable() ? await shot(page) : null
