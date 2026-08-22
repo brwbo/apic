@@ -43,8 +43,7 @@ export async function replay(tool, args, { headless = true, session = null } = {
 
     const before = await snapshot(page)
 
-    await page.locator('button:visible, a[href]:visible, [role="button"]:visible')
-      .filter({ hasText: tool.recipe.click }).first().click({ timeout: 4000 })
+    await opener(page, tool)
     await page.waitForTimeout(700)
 
     const unfilled = []
@@ -68,6 +67,29 @@ export async function replay(tool, args, { headless = true, session = null } = {
       added: d.added.slice(0, 3),
     }
   } finally { if (own) await closeSession(s) }
+}
+
+/**
+ * Click whatever opens this action, if anything does.
+ *
+ * `recipe.click` is the canonical gesture ("create task") because that is what
+ * named the tool - no button carries that text. The control actually clicked at
+ * compile time is kept in the evidence, so try that first, then the canonical
+ * phrase, then give up quietly: inline actions like Kanban quick-add have no
+ * opener at all, and throwing on a missing one fails a tool that is working.
+ */
+async function opener(page, tool) {
+  const control = tool.provenance?.evidence?.control
+  const attr = (v) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  const tries = []
+  for (const text of [control, tool.recipe.click].filter(Boolean)) {
+    tries.push(page.locator('button:visible, a[href]:visible, [role="button"]:visible').filter({ hasText: text }).first())
+    tries.push(page.locator(`[aria-label="${attr(text)}"]:visible`).first())
+  }
+  for (const el of tries) {
+    try { await el.click({ timeout: 2500 }); return true } catch { /* next handle */ }
+  }
+  return false
 }
 
 /**

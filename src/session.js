@@ -41,13 +41,26 @@ export async function openSession({ headless = true, state = STATE } = {}) {
  */
 export async function ensure(session, target = config.target) {
   const { page, context, state } = session
-  await page.goto(`${target.url}/`, { waitUntil: 'domcontentloaded' })
-  await page.waitForTimeout(400)
 
-  if (!page.url().includes('/login')) {
-    session.authed = true
-    return { reused: true }
-  }
+  // Not on /login is NOT proof of being logged in.
+  //
+  // A stored session whose refresh token has expired still renders the whole
+  // app: the SPA boots from localStorage, never redirects, and only the writes
+  // fail - 401 on /user/token/refresh, and every create silently turns into a
+  // generic "Error / unexpected" toast. That reads downstream as "the app
+  // rejected this action", so discovery quietly loses every write it tries.
+  // Watch for the 401 instead of trusting the URL.
+  let unauthorized = false
+  const watch = (r) => { if (r.url().includes('/api/v1/') && r.status() === 401) unauthorized = true }
+  page.on('response', watch)
+  try {
+    await page.goto(`${target.url}/projects`, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(900)
+    if (!page.url().includes('/login') && !unauthorized) {
+      session.authed = true
+      return { reused: true }
+    }
+  } finally { page.off('response', watch) }
 
   await login(page, target)
   mkdirSync(dirname(state), { recursive: true })
