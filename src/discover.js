@@ -14,7 +14,8 @@
  */
 import { snapshot, diff, describe, shot, visionAvailable } from './perceive.js'
 import { fields, fill, submitButton, confirmButton } from './forms.js'
-import { rank, isDestructive, gesture, scopeOf, resourceOf } from './plan.js'
+import { rank, isDestructive, gesture, gestureFrom, offSlice, scopeOf, resourceOf, VOCABULARY } from './plan.js'
+import * as h from './h.js'
 import { affordances, links } from './explore.js'
 
 const SETTLE = 1400
@@ -30,13 +31,14 @@ const frame = (page) => (VISION ? shot(page) : Promise.resolve(null))
  * that is what names the emitted tool; `control` is the raw UI string, kept so
  * replay knows what to click and a reviewer can see where the tool came from.
  */
-function record({ g, control, handles, parameters, d, seedUrl, extra = {} }) {
+function record({ g, control, handles, parameters, d, seedUrl, planner = 'heuristic', extra = {} }) {
   // Every way the control could be found at compile time. replay tries them in
   // order, so a control that renders differently later still resolves.
   const controls = [...new Set([control, ...(handles || [])].filter(Boolean))]
   return {
     label: g.label,
     control,
+    planner,
     parameters,
     effect: d.kind,
     changed: d.changed,
@@ -114,16 +116,83 @@ async function createdLink(page, value) {
   }, value).catch(() => null)
 }
 
-export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep } = {}) {
+/**
+ * Drop the rows before asking about the buttons.
+ *
+ * `/labels` offers 47 clickable things and 45 of them are labels a previous
+ * probe run created - content, not controls. Sending those spends a call
+ * describing a list to a model and invites one probe per row, which is how a
+ * classifier turns into a crawler.
+ *
+ * A control appears once; a collection repeats. Grouping by shape - words
+ * stripped of their digits and ids - separates the two without knowing anything
+ * about this app, and a group with siblings is content.
+ */
+function withoutContent(labels, onLog) {
+  const shape = (l) => l.toLowerCase().replace(/[0-9]+/g, '#').replace(/\b[a-z0-9]{6,}\b/g, '*').trim()
+  const groups = new Map()
+  for (const l of labels) groups.set(shape(l), [...(groups.get(shape(l)) || []), l])
+
+  const kept = labels.filter((l) => groups.get(shape(l)).length === 1)
+  const dropped = labels.length - kept.length
+  if (dropped) onLog?.(`${dropped} repeated row${dropped === 1 ? '' : 's'} look like content, not controls - not sent to h`)
+  return kept
+}
+
+/**
+ * Escalate the leftovers to h.
+ *
+ * Only the controls `gesture()` refused are sent, and only once per seed - the
+ * regex vocabulary is right about most of a page and there is nothing to gain
+ * by asking about what it already resolved. Off-slice controls are withheld
+ * rather than offered: "ADD TO FAVORITES" is a real write that this slice
+ * deliberately excludes, and that is a scoping decision, not a gap in the
+ * vocabulary for a model to fill.
+ *
+ * Returns label -> gesture for whatever survives validation. Empty whenever h
+ * is unkeyed, unreachable, or unsure, which is the keyless behaviour unchanged.
+ */
+async function classify(page, candidates, { scope, skipDestructive, onLog }) {
+  const out = new Map()
+  if (!h.available()) return out
+
+  const unresolved = candidates
+    .filter(({ label }) => !(skipDestructive && isDestructive(label)))
+    .filter(({ label }) => !gesture(label, { scope }) && !offSlice(label))
+    .map(({ label }) => label)
+  if (!unresolved.length) return out
+
+  const leftovers = withoutContent(unresolved, onLog)
+  if (!leftovers.length) return out
+
+  const res = await h.classifyGestures(page, { labels: leftovers, scope, ...VOCABULARY })
+  if (res?.error) { onLog?.(`h unavailable (${res.error}) - vocabulary only`); return out }
+  onLog?.(`h read ${leftovers.length} unresolved control${leftovers.length === 1 ? '' : 's'}, named ${res.length}`)
+
+  for (const { label, verb, noun, why } of res) {
+    const g = gestureFrom(verb, noun, { scope })
+    // Refused: outside the closed vocabulary, or a pair the canonical rules
+    // reject. Logged rather than swallowed - a classifier whose answers are
+    // being discarded should be visible, not silently idle.
+    if (!g) { onLog?.(`h proposed ${verb}/${noun} for "${label}" - outside the vocabulary, refused`); continue }
+    out.set(label, g)
+    onLog?.(`h: "${label}" -> ${g.label} (${why})`)
+  }
+  return out
+}
+
+export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep, onLog } = {}) {
   const scope = scopeOf(seedUrl)
   const found = []
   await page.goto(seedUrl, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(600)
 
   const candidates = rank(await affordances(page))
+  const classified = await classify(page, candidates, { scope, skipDestructive, onLog })
+
   for (const { label, handles } of candidates) {
     if (skipDestructive && isDestructive(label)) continue
-    const g = gesture(label, { scope })
+    const g = gesture(label, { scope }) || classified.get(label) || null
     if (!g) continue
 
     await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
@@ -148,7 +217,7 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
     const d = diff(before, afterSnap, used[0]?.value)
     const controlStable = await stillResolves(page, seedUrl, [label, ...(handles || [])])
     const step = record({
-      g, control: label, handles, d, seedUrl,
+      g, control: label, handles, d, seedUrl, planner: classified.has(label) ? 'h' : 'heuristic',
       parameters: used.map(({ name, label: l, placeholder, type, required, value, selector, selectors }) =>
         ({ name, label: l, placeholder, type, required, example: value, selector, selectors })),
       extra: { frames: { before: beforeFrame, after: afterFrame } },
@@ -158,7 +227,7 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
     // A control that no longer resolves once the action has run cannot be
     // clicked again, so a tool minted from it is a false positive: true at
     // compile time, unreplayable forever after. Reported, then dropped.
-    if (d.changed && controlStable) found.push(step)
+    if (d.changed && controlStable !== false) found.push(step)
     onStep?.(step, d)
   }
   return found
@@ -175,7 +244,7 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
  *
  * Destructive gestures run last, on the task apic created itself.
  */
-export async function discoverTask(page, taskUrl, { onStep } = {}) {
+export async function discoverTask(page, taskUrl, { onStep, onLog } = {}) {
   const found = []
   const scope = 'task'
   const push = (step, d) => { if (step && d.changed) found.push(step); if (step) onStep?.(step, d) }
@@ -243,15 +312,24 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
   // --- the rest: one click, sometimes a field, sometimes a confirmation -------
   const gestures = []
   await reload()
-  for (const { label, handles } of await affordances(page)) {
-    const g = gesture(label, { scope })
+  const controls = await affordances(page)
+  // The task page is where the vocabulary is weakest: its controls are icons,
+  // bare adjectives ("Done") and dropdowns rather than verb phrases, so this is
+  // where h has something to add that a regex cannot.
+  const classified = await classify(page, controls, { scope, skipDestructive: false, onLog })
+  for (const { label, handles } of controls) {
+    const g = gesture(label, { scope }) || classified.get(label) || null
+    // Only the verbs this loop owns. Rename and bucket-move have dedicated
+    // branches above, and letting them through here probes them a second time -
+    // which mutates the task out from under the gestures still queued behind
+    // it, and cost mark/assign/delete an entire run when it was tried.
     if (!g || !['mark', 'assign', 'delete'].includes(g.verb)) continue
-    gestures.push({ label, handles, g })
+    gestures.push({ label, handles, g, planner: classified.has(label) ? 'h' : 'heuristic' })
   }
   // destructive last: it takes the page with it
   gestures.sort((a, b) => Number(isDestructive(a.g.label)) - Number(isDestructive(b.g.label)))
 
-  for (const { label, handles, g } of gestures) {
+  for (const { label, handles, g, planner } of gestures) {
     const { snap: before, frame: beforeFrame } = await reload()
     if (!(await open(page, label, handles))) continue
 
@@ -274,7 +352,7 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
 
     const d = diff(before, await snapshot(page), used?.value)
     push(record({
-      g, control: label, handles, d, seedUrl: taskUrl,
+      g, control: label, handles, d, seedUrl: taskUrl, planner,
       parameters: used ? [{ ...used, example: used.value }] : [],
       extra: {
         destructive: isDestructive(g.label) || undefined,
@@ -327,16 +405,29 @@ const CLICKABLE = 'main button:visible, main a[href]:visible, main [role="button
  * that are legitimately conditional.
  */
 async function stillResolves(page, seedUrl, tries) {
-  await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
+  let loaded = true
+  await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => { loaded = false })
   await page.waitForTimeout(600)
+
+  // Tri-state, for the reason persist.js already states: a probe that fails
+  // proves nothing either way, so never reject a tool on the strength of a page
+  // that would not load. Collapsing "could not tell" into "does not resolve"
+  // rejects, and a rejection here is not local - dropping create-project leaves
+  // no project to descend into, so the entire task branch goes with it. One
+  // expired session cost a compile 7 of its 9 tools.
+  if (!loaded) return null
+  if (page.url().includes('/login')) return null // session dropped mid-compile
+
+  let errored = false
+  const count = async (sel) => {
+    try { return await page.locator(sel).count() } catch { errored = true; return 0 }
+  }
   for (const t of tries.filter(Boolean)) {
     const attr = t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-    const n = await page.locator(`${CLICKABLE}`).filter({ hasText: t }).count().catch(() => 0)
-    if (n) return true
-    const a = await page.locator(`main [aria-label="${attr}"]:visible`).count().catch(() => 0)
-    if (a) return true
+    if (await page.locator(`${CLICKABLE}`).filter({ hasText: t }).count().catch(() => { errored = true; return 0 })) return true
+    if (await count(`main [aria-label="${attr}"]:visible`)) return true
   }
-  return false
+  return errored ? null : false
 }
 
 

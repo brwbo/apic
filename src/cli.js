@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { discoverOn, discoverInline, discoverTask, describe } from './discover.js'
+import { discoverOn, discoverInline, discoverTask, describe, links } from './discover.js'
 import { discoverMove } from './kanban.js'
 import { gesture } from './plan.js'
 import { openSession, ensure, closeSession } from './session.js'
@@ -9,6 +9,7 @@ import { adjudicate, summariseVision, shot, visionAvailable } from './perceive.j
 import { checkPersistence, summarise as summarisePersistence } from './persist.js'
 import { emit } from './emit.js'
 import { config } from './config.js'
+import { groundTruth, score } from './score.js'
 import { writeFileSync, mkdirSync } from 'node:fs'
 
 // Seeds are per-target: nothing about the compiler knows Vikunja's routes.
@@ -84,7 +85,21 @@ try {
   }
 
   // A board is projects -> tasks -> labels. Follow the project apic just made.
-  const project = actions.map((a) => a.evidence?.to).find((u) => u && PROJECT_SEED.test(u))
+  let project = actions.map((a) => a.evidence?.to).find((u) => u && PROJECT_SEED.test(u))
+
+  // Every deeper seed hangs off this one URL, so a create-project that does not
+  // land takes createTask, moveTask, updateTask, markTask, assignLabel and
+  // deleteTask with it - a compile that quietly returns 2 tools instead of 9 and
+  // still exits 0. Tasks live in ANY project, not only one apic just made, so
+  // fall back to a project that already exists rather than losing the branch.
+  if (!project) {
+    await page.goto(`${config.target.url}/projects`, { waitUntil: 'domcontentloaded' }).catch(() => {})
+    await page.waitForTimeout(1200)
+    project = (await links(page)).find((h) => PROJECT_SEED.test(h)) || null
+    console.log(project
+      ? `  \x1b[33m!\x1b[0m create project yielded no seed - descending into existing ${project}`
+      : '  \x1b[33m!\x1b[0m create project yielded no seed and no project exists - task branch unreachable')
+  }
   let task = null
   if (project) {
     await guard('project seed')
@@ -125,9 +140,12 @@ try {
   // gestures run against the task apic created itself, one paragraph above.
   if (task) {
     console.log(`  seed ${task} (discovered)`)
-    await settle(await discoverTask(page, abs(task), { onStep: line('\x1b[36m>\x1b[0m') }))
+    await settle(await discoverTask(page, abs(task), {
+      onStep: line('\x1b[36m>\x1b[0m'),
+      onLog: (m) => console.log(`  \x1b[33m!\x1b[0m ${m}`),
+    }))
   } else {
-    console.log('  \x1b[33m!\x1b[0m no task created - skipping the task detail seed')
+    console.log(`  \x1b[33m!\x1b[0m no task created in ${project || 'any project'} - skipping the task detail seed (costs 5 tools)`)
   }
 
   const withParams = actions.filter((a) => a.parameters.length).length
@@ -153,12 +171,31 @@ try {
   writeFileSync('out/perception.json', JSON.stringify(perception, null, 2))
 
   const tools = synthesize(actions)
-  const { dir, count } = emit(tools, { app: process.env.APIC_APP || 'vikunja', target: config.target.url })
+  const { dir, count } = emit(tools, {
+    app: process.env.APIC_APP || 'vikunja',
+    outDir: process.env.APIC_OUT_DIR || 'generated',
+    target: config.target.url,
+  })
   // generated/ is the shared demo artifact and other sessions compile into it
   // too. Snapshot this run's own output so `npm run score out/tools.json`
   // scores what THIS compile produced rather than whatever landed last.
   writeFileSync('out/tools.json', JSON.stringify({ tools }, null, 2))
   console.log(`  ${count} tools synthesised -> ${dir}/`)
   tools.forEach((t) => console.log(`    ${t.destructive ? '\x1b[31m!\x1b[0m' : ' '} ${t.name}(${Object.keys(t.inputSchema.properties).join(', ')})`))
+
+  // Score THIS run, in this process, against the tools it just built.
+  //
+  // out/ and generated/ are shared with every other session compiling into the
+  // same checkout, so `npm run score` reads whichever compile finished last -
+  // it read a 5-tool artifact seven seconds after this one wrote 9. A number
+  // you cannot attribute to a run is worse than no number, so the run reports
+  // its own and never touches the disk to do it.
+  try {
+    const s = score(tools, await groundTruth())
+    console.log(`\n  RECALL    ${s.recall.hit}/${s.recall.total}   (actions apic found)`)
+    console.log(`  PRECISION ${s.precision.hit}/${s.precision.total}   (emitted tools that are real)`)
+  } catch (e) {
+    console.log(`  \x1b[33m!\x1b[0m could not score this run: ${String(e.message).slice(0, 80)}`)
+  }
   console.log()
 } finally { await closeSession(session) }
