@@ -3,6 +3,7 @@ import Stack from "@/components/stack";
 import Problem from "@/components/problem";
 import Stats from "@/components/stats";
 import Demo from "@/components/demo";
+import Partners from "@/components/partners";
 import Integrations from "@/components/integrations";
 import About from "@/components/about";
 
@@ -19,6 +20,7 @@ export default function App() {
       <Problem />
       <Demo />
       <Stats />
+      <Partners />
       <Integrations />
       <About />
       <footer className="border-t border-white/10 px-6 py-10 sm:px-10">
