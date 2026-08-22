@@ -19,7 +19,7 @@ const headless = !process.argv.includes('--headed')
 
 const abs = (u) => (u.startsWith('http') ? u : `${config.target.url}${u}`)
 const line = (mark) => (s, d) =>
-  console.log(`    ${s.changed ? mark : ' '} ${s.label.padEnd(14)} ${(s.control || '').padEnd(22).slice(0, 22)} ${s.parameters.length ? `[${s.parameters.length}p] ` : '     '}${describe(d).slice(0, 44)}`)
+  console.log(`    ${s.evidence?.controlStable === false ? '\x1b[31m~\x1b[0m' : s.changed ? mark : ' '} ${s.label.padEnd(14)} ${(s.control || '').padEnd(22).slice(0, 22)} ${s.parameters.length ? `[${s.parameters.length}p] ` : '     '}${describe(d).slice(0, 44)}`)
 
 // One login for the whole compile, reused from disk across runs. Vikunja rate
 // limits the login route, and a compile that re-authenticates per seed spends
@@ -115,7 +115,7 @@ try {
         // Canonicalise the label the same way discover.js does, so the emitted
         // tool is `moveTask` and not `moveCardBetweenColumns`.
         const g = gesture('move bucket', { scope: 'task' })
-        actions.push({ ...move, label: g.label, control: move.label, evidence: { ...move.evidence, control: move.label } })
+        actions.push({ ...move, label: g.label, control: move.label, evidence: { ...move.evidence, control: move.label, controls: [move.label] } })
         console.log(`    \x1b[32m>\x1b[0m ${g.label.padEnd(14)} ${move.label.padEnd(22).slice(0, 22)} [2p] ${move.evidence.announced.text.slice(0, 44)}`)
       }
     }

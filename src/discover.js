@@ -30,7 +30,10 @@ const frame = (page) => (VISION ? shot(page) : Promise.resolve(null))
  * that is what names the emitted tool; `control` is the raw UI string, kept so
  * replay knows what to click and a reviewer can see where the tool came from.
  */
-function record({ g, control, parameters, d, seedUrl, extra = {} }) {
+function record({ g, control, handles, parameters, d, seedUrl, extra = {} }) {
+  // Every way the control could be found at compile time. replay tries them in
+  // order, so a control that renders differently later still resolves.
+  const controls = [...new Set([control, ...(handles || [])].filter(Boolean))]
   return {
     label: g.label,
     control,
@@ -40,6 +43,7 @@ function record({ g, control, parameters, d, seedUrl, extra = {} }) {
     committed: true,
     evidence: {
       control,
+      controls,
       added: d.added.slice(0, 3),
       removed: d.removed.slice(0, 3),
       from: d.from, to: d.to,
@@ -117,7 +121,7 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
   await page.waitForTimeout(600)
 
   const candidates = rank(await affordances(page))
-  for (const { label } of candidates) {
+  for (const { label, handles } of candidates) {
     if (skipDestructive && isDestructive(label)) continue
     const g = gesture(label, { scope })
     if (!g) continue
@@ -127,7 +131,7 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
     const before = await snapshot(page)
     const beforeFrame = await frame(page)
 
-    const opened = await open(page, label)
+    const opened = await open(page, label, handles)
     if (!opened) continue
 
     const discovered = await fields(page)
@@ -140,15 +144,21 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
     }
 
     const afterSnap = await snapshot(page)
+    const afterFrame = await frame(page)
     const d = diff(before, afterSnap, used[0]?.value)
+    const controlStable = await stillResolves(page, seedUrl, [label, ...(handles || [])])
     const step = record({
-      g, control: label, d, seedUrl,
+      g, control: label, handles, d, seedUrl,
       parameters: used.map(({ name, label: l, placeholder, type, required, value, selector, selectors }) =>
         ({ name, label: l, placeholder, type, required, example: value, selector, selectors })),
-      extra: { frames: { before: beforeFrame, after: await frame(page) } },
+      extra: { frames: { before: beforeFrame, after: afterFrame } },
     })
+    step.evidence.controlStable = controlStable
     step.committed = committed
-    if (d.changed) found.push(step)
+    // A control that no longer resolves once the action has run cannot be
+    // clicked again, so a tool minted from it is a false positive: true at
+    // compile time, unreplayable forever after. Reported, then dropped.
+    if (d.changed && controlStable) found.push(step)
     onStep?.(step, d)
   }
   return found
@@ -223,7 +233,7 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
       const d = diff(before, await snapshot(page), moved.picked)
       const g = gesture('move bucket', { scope })
       push(record({
-        g, control: moved.control, d, seedUrl: taskUrl,
+        g, control: moved.control, handles: moved.handles, d, seedUrl: taskUrl,
         parameters: [{ name: 'bucket', label: 'Bucket', placeholder: '', type: 'string', required: true, example: moved.picked, selector: moved.selector }],
         extra: { frames: { before: beforeFrame, after: await frame(page) } },
       }), d)
@@ -233,17 +243,17 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
   // --- the rest: one click, sometimes a field, sometimes a confirmation -------
   const gestures = []
   await reload()
-  for (const { label } of await affordances(page)) {
+  for (const { label, handles } of await affordances(page)) {
     const g = gesture(label, { scope })
     if (!g || !['mark', 'assign', 'delete'].includes(g.verb)) continue
-    gestures.push({ label, g })
+    gestures.push({ label, handles, g })
   }
   // destructive last: it takes the page with it
   gestures.sort((a, b) => Number(isDestructive(a.g.label)) - Number(isDestructive(b.g.label)))
 
-  for (const { label, g } of gestures) {
+  for (const { label, handles, g } of gestures) {
     const { snap: before, frame: beforeFrame } = await reload()
-    if (!(await open(page, label))) continue
+    if (!(await open(page, label, handles))) continue
 
     // a field may have appeared (ADD LABELS); commit it with Enter
     const opened = await fields(page)
@@ -264,7 +274,7 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
 
     const d = diff(before, await snapshot(page), used?.value)
     push(record({
-      g, control: label, d, seedUrl: taskUrl,
+      g, control: label, handles, d, seedUrl: taskUrl,
       parameters: used ? [{ ...used, example: used.value }] : [],
       extra: {
         destructive: isDestructive(g.label) || undefined,
@@ -284,7 +294,7 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
 async function chooseOther(page, match) {
   const opener = (await affordances(page)).find((a) => match.test(a.label))
   if (!opener) return null
-  if (!(await open(page, opener.label))) return null
+  if (!(await open(page, opener.label, opener.handles))) return null
 
   const options = await page.evaluate(() => {
     const sel = '[role="menuitem"], .dropdown-item, .dropdown-content a, .dropdown-content button'
@@ -301,10 +311,34 @@ async function chooseOther(page, match) {
   const el = page.locator('[role="menuitem"], .dropdown-item, .dropdown-content a, .dropdown-content button').filter({ hasText: picked }).first()
   try { await el.click({ timeout: 3000 }) } catch { return null }
   await page.waitForTimeout(SETTLE)
-  return { control: opener.label, picked, selector: null }
+  return { control: opener.label, handles: opener.handles, picked, selector: null }
 }
 
 const CLICKABLE = 'main button:visible, main a[href]:visible, main [role="button"]:visible'
+
+/**
+ * Does this control still exist once the action has changed the app's state?
+ *
+ * A control that only renders in one state is not a capability of the app, it
+ * is a property of that moment - an empty-collection call to action is the
+ * classic case: it is on screen only until the first row exists, so a tool
+ * minted from it can never be replayed against a populated app. Recorded as
+ * evidence rather than acted on, because the same signal fires for controls
+ * that are legitimately conditional.
+ */
+async function stillResolves(page, seedUrl, tries) {
+  await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
+  await page.waitForTimeout(600)
+  for (const t of tries.filter(Boolean)) {
+    const attr = t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    const n = await page.locator(`${CLICKABLE}`).filter({ hasText: t }).count().catch(() => 0)
+    if (n) return true
+    const a = await page.locator(`main [aria-label="${attr}"]:visible`).count().catch(() => 0)
+    if (a) return true
+  }
+  return false
+}
+
 
 /**
  * Click an affordance and wait for whatever it opens.
@@ -314,12 +348,15 @@ const CLICKABLE = 'main button:visible, main a[href]:visible, main [role="button
  * aria-label is "Kanban bucket: To-Do" - matching on text alone silently missed
  * the single most visible action on a Kanban board.
  */
-async function open(page, label) {
-  const attr = label.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-  const candidates = [
-    page.locator(`${CLICKABLE}`).filter({ hasText: label }).first(),
-    page.locator(`main [aria-label="${attr}"]:visible`).first(),
-  ]
+async function open(page, label, handles = []) {
+  const tries = [...new Set([label, ...handles].filter(Boolean))]
+  const candidates = tries.flatMap((t) => {
+    const attr = t.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+    return [
+      page.locator(`${CLICKABLE}`).filter({ hasText: t }).first(),
+      page.locator(`main [aria-label="${attr}"]:visible`).first(),
+    ]
+  })
   for (const el of candidates) {
     try {
       await el.click({ timeout: 2500 })
