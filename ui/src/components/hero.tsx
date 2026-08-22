@@ -150,7 +150,15 @@ export function Hero({
         </p>
 
         <div className="mt-9 hidden sm:block">
-          <HoverTerminal command="claude mcp add apic -- node ./generated/vikunja/server.js" label="Install" width={560} />
+          {/* The hover reveal shows the Claude Code one-liner, but the click goes
+              to #install - Codex, Cursor, VS Code and Desktop all want something
+              else, and the section down there has each of them. */}
+          <HoverTerminal
+            href="#install"
+            command="claude mcp add apic -- node ./src/server.js"
+            label="Install"
+            width={560}
+          />
         </div>
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-2 font-mono text-[13px] text-white/45">

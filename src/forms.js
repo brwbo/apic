@@ -21,7 +21,10 @@ export async function fields(page) {
       if (!r.width || !r.height) continue
       const editable = el.getAttribute('contenteditable') === 'true'
       // A contenteditable is a <h1>/<div>, so tagName is not a field type.
-      const type = editable ? 'text' : (el.getAttribute('type') || el.tagName.toLowerCase())
+      // `<input>` defaults to text when its type attribute is absent. Recording
+      // it as the tag name made public type-ahead fields (Uber pickup/dropoff,
+      // address lookups, fare estimators) invisible to read discovery.
+      const type = editable ? 'text' : (el.getAttribute('type') || (el.tagName === 'INPUT' ? 'text' : el.tagName.toLowerCase()))
       if (['hidden', 'submit', 'button', 'checkbox', 'radio'].includes(type)) continue
       const id = el.id
       const name = el.getAttribute('name') || ''
@@ -66,6 +69,7 @@ export async function fields(page) {
       if (tail) selectors.push(`[id^="${attr(tail[1])}"]`)
       if (id && AUTO_ID.test(id)) selectors.push(`#${CSS.escape(id)}`) // last resort
 
+      const visibleSelectors = selectors.map((selector) => `${selector}:visible`)
       out.push({
         name: name || id || '',
         label: (labelEl?.innerText || aria || '').trim().slice(0, 40),
@@ -73,8 +77,8 @@ export async function fields(page) {
         type: type === 'textarea' ? 'text' : type,
         required: el.hasAttribute('required'),
         editable,
-        selector: selectors[0] || null,
-        selectors,
+        selector: visibleSelectors[0] || null,
+        selectors: visibleSelectors,
       })
     }
     return out.filter((f) => f.selector)

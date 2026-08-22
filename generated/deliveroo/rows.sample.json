@@ -1,0 +1,39 @@
+{
+  "searchResults": [
+    {
+      "url": "https://deliveroo.co.uk/menu/London/shoreditch/pizza-pilgrims-shoreditch?day=today&geohash=gcpvnhn3jt3p&time=ASAP",
+      "name": "Pizza Pilgrims",
+      "deliveryTime": "10 min",
+      "promotion": "Spend £10, get £0 delivery fee",
+      "price": "£10"
+    },
+    {
+      "url": "https://deliveroo.co.uk/menu/London/haggerston/song-que-cafe?day=today&geohash=gcpvnhn3jt3p&time=ASAP",
+      "name": "Song Que Cafe",
+      "deliveryTime": "10 min",
+      "promotion": "Spend £10, get £0 delivery fee",
+      "price": "£10"
+    },
+    {
+      "url": "https://deliveroo.co.uk/menu/London/spitalfields/pho-spitalfields?day=today&geohash=gcpvnhn3jt3p&time=ASAP",
+      "name": "Pho",
+      "deliveryTime": "10 min",
+      "promotion": "Spend £25, get 20% off",
+      "price": "£25"
+    }
+  ],
+  "listMenuItems": [
+    {
+      "name": "Festa di Famiglia",
+      "price": "£35.00"
+    },
+    {
+      "name": "Yellow Piennolo",
+      "price": "£14.00"
+    },
+    {
+      "name": "Pilgrimage for 6 🍕🍕🍕🍕🍕🍕",
+      "price": "£111.00"
+    }
+  ]
+}

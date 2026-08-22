@@ -6,8 +6,8 @@ import { ClaudeIcon, OpenAIIcon, CursorIcon, VSCodeIcon } from "@/components/ui/
 import { cn } from "@/lib/utils";
 import { SectionLabel } from "@/components/section-label";
 
-const SERVER = "./generated/vikunja/server.js";
-const ABS = "/absolute/path/to/apic/generated/vikunja/server.js";
+const SERVER = "./src/server.js";
+const ABS = "/absolute/path/to/apic/src/server.js";
 
 interface Client {
   id: string;
@@ -75,7 +75,7 @@ command = "node"
 args = ["${ABS}"]`,
     prompt: `Add an MCP server named apic to ~/.codex/config.toml as an
 [mcp_servers.apic] table \u2014 command "node", args the absolute path to
-generated/vikunja/server.js in this repo. Leave the other mcp_servers tables alone,
+src/server.js in this repo. Leave the other mcp_servers tables alone,
 then show me the tools apic exposes.`,
   },
   {
@@ -95,7 +95,7 @@ then show me the tools apic exposes.`,
 }`,
     prompt: `Add an MCP server named apic to ~/.cursor/mcp.json \u2014 command "node",
 args the absolute path to
-generated/vikunja/server.js in this repo. Merge it into the
+src/server.js in this repo. Merge it into the
 existing mcpServers object rather than replacing the file, then tell me to
 enable it under Settings \u2192 MCP.`,
   },
@@ -145,11 +145,12 @@ export function Integrations() {
       <div className="mx-auto max-w-5xl">
         <SectionLabel>Install</SectionLabel>
         <h2 className="mt-5 max-w-2xl font-[family-name:var(--font-display)] text-[clamp(2.1rem,4.6vw,3.4rem)] font-extrabold leading-[0.98] tracking-[-0.045em] text-white">
-          Hand the compiled server to any agent.
+          Install the compiler, not the tools.
         </h2>
         <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-white/60">
-          What apic emits is an ordinary stdio MCP server — no runtime, no daemon, no account. If a
-          client speaks MCP, it speaks to your app.
+          apic is an ordinary stdio MCP server — no runtime, no daemon, no account. It starts with one
+          tool, <span className="font-mono text-white/80">compile_app</span>; the rest arrive at runtime,
+          in the session you are already in. If a client speaks MCP, it speaks to apic.
         </p>
 
         <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-3">

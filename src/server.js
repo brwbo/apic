@@ -21,6 +21,8 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { compile, ROOT } from './compile.js'
 import { replay } from './replay.js'
+import { replayRead } from './replay-read.js'
+import { fulfillRequest } from './request-router.js'
 import { heal } from './heal.js'
 import { openSession, closeSession, ensure } from './session.js'
 import { config } from './config.js'
@@ -55,6 +57,22 @@ const COMPILE_APP = {
   },
 }
 
+// The consumer-facing entry point. A chat agent supplies only the user's
+// request; site search, public-flow compilation and verified replay stay on
+// the server side so neither a URL nor per-site wiring leaks into the prompt.
+const FULFILL_REQUEST = {
+  name: 'fulfill_request',
+  description:
+    'Answer a natural-language request from a public website. APIC discovers a suitable site, ' +
+    'compiles its read-only UI into tools, cold-verifies them, then uses only those verified tools. ' +
+    'Does not log in, add items to a basket, checkout, or bypass challenges.',
+  inputSchema: {
+    type: 'object',
+    properties: { request: { type: 'string', description: 'The user request, such as "find the cheapest pizza near 17 & 18 Clere Street".' } },
+    required: ['request'],
+  },
+}
+
 /**
  * Register one app's compiled tools, replacing whatever that app registered
  * before - a recompile supersedes its own previous output rather than colliding
@@ -62,9 +80,9 @@ const COMPILE_APP = {
  */
 function registerApp(app, tools) {
   for (const [name, entry] of registry) if (entry.app === app) registry.delete(name)
-  const taken = (n) => n === COMPILE_APP.name || registry.has(n)
+  const taken = (n) => n === COMPILE_APP.name || n === FULFILL_REQUEST.name || registry.has(n)
   const names = []
-  for (const tool of tools) {
+  for (const tool of tools.filter((candidate) => candidate?.verification?.verified !== false)) {
     const name = taken(tool.name) ? `${app}_${tool.name}` : tool.name
     registry.set(name, { app, tool })
     names.push(name)
@@ -118,6 +136,7 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   const tools = [
     COMPILE_APP,
+    FULFILL_REQUEST,
     ...[...registry].map(([name, { tool }]) => ({
       name, description: tool.description, inputSchema: tool.inputSchema,
     })),
@@ -132,6 +151,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args = {} } = req.params
   if (name === COMPILE_APP.name) return runCompile(args)
+  if (name === FULFILL_REQUEST.name) return runFulfill(args)
 
   const entry = registry.get(name)
   if (!entry) return unknownTool(name)
@@ -177,7 +197,7 @@ async function revive() {
 
 /** replay(), with a thrown error flattened into the shape a failed result already has. */
 async function attempt(tool, args, s) {
-  try { return await replay(tool, args, { session: s }) }
+  try { return tool.kind === 'read' ? await replayRead(tool, args) : await replay(tool, args, { session: s }) }
   catch (err) { return { ok: false, error: err.message.split('\n')[0] } }
 }
 
@@ -210,6 +230,16 @@ const text = (o) => ({ content: [{ type: 'text', text: JSON.stringify(o, null, 2
  * shows up when it needs something.
  */
 async function runTool(name, { app, tool }, args) {
+  // The write healer understands evidence of a state change. A read tool is
+  // verified by repeated rows instead, so feeding a failed public search into
+  // the write healer would manufacture the wrong sort of repair.
+  if (tool.kind === 'read') {
+    const res = await attempt(tool, args)
+    if (res.ok) return text(res)
+    return { isError: true, content: [{ type: 'text', text:
+      `${name} could not replay its public read recipe: ${res.error || 'no rows'}. ` +
+      'Use fulfill_request to discover and compile a fresh public flow.' }] }
+  }
   let s = await session()
   let res = await attempt(tool, args, s)
 
@@ -291,6 +321,26 @@ async function runCompile({ url = config.target.url, goal = '' }) {
   }
 }
 
+/** Discover, compile and execute a public flow from prose alone. */
+async function runFulfill({ request } = {}) {
+  const result = await fulfillRequest(request, { outDir: GENERATED, log })
+  if (!result.ok) return { isError: true, content: [{ type: 'text', text: result.error }] }
+
+  const names = registerApp(result.app, result.compiled?.verified || [])
+  let announced = 'not needed'
+  if (names.length) {
+    try { await server.sendToolListChanged(); announced = 'sent' } catch (err) { announced = `failed: ${err.message}` }
+  }
+  return text({
+    answer: result.answer,
+    source: result.target,
+    evidence: result.evidence,
+    compiledTools: result.tools,
+    registered: names,
+    listChangedNotification: announced,
+  })
+}
+
 loadGenerated()
 process.on('exit', () => { shared?.browser?.close().catch(() => {}) })
 for (const sig of ['SIGINT', 'SIGTERM']) {
@@ -298,4 +348,4 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 }
 
 await server.connect(new StdioServerTransport())
-log(`ready - ${registry.size} compiled tools + compile_app`)
+log(`ready - ${registry.size} compiled tools + compile_app + fulfill_request`)

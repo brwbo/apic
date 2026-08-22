@@ -1,0 +1,248 @@
+{
+  "app": "deliveroo",
+  "target": "https://deliveroo.co.uk",
+  "generatedBy": "apic",
+  "tools": [
+    {
+      "name": "searchResults",
+      "kind": "read",
+      "description": "Schema for restaurant cards in Deliveroo Shoreditch delivery list Returns url, name, deliveryTime, promotion, price per row.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Enter a postcode to see what we deliver:"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "rowSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Link to the restaurant's menu page, required:true."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the restaurant, required:true."
+          },
+          "deliveryTime": {
+            "type": "string",
+            "description": "Estimated delivery time."
+          },
+          "promotion": {
+            "type": "string",
+            "description": "Promotional text or delivery fee info."
+          },
+          "price": {
+            "type": "string",
+            "description": "The first displayed currency amount for this item."
+          }
+        },
+        "required": [
+          "url",
+          "name",
+          "deliveryTime"
+        ]
+      },
+      "recipe": {
+        "via": "form",
+        "origin": "https://deliveroo.co.uk",
+        "seedUrl": "https://deliveroo.co.uk/",
+        "submit": "Search",
+        "inputs": [
+          {
+            "selector": "[name=\"location-search\"]:visible",
+            "schemaKey": "query"
+          }
+        ],
+        "params": {
+          "query": "Enter a postcode to see what we deliver:"
+        },
+        "container": "ul[class*=\"Carousel-\"]:has(> li[class*=\"Slide-\"] [data-testid=\"partner-card-small-horizontal\"])",
+        "rowSelector": "li[class*=\"Slide-\"]",
+        "fields": [
+          {
+            "name": "url",
+            "selector": "[data-testid=\"partner-card-small-horizontal\"]",
+            "attr": "href"
+          },
+          {
+            "name": "name",
+            "selector": "[data-testid=\"partner-name\"]",
+            "attr": null
+          },
+          {
+            "name": "deliveryTime",
+            "selector": "[data-testid=\"partner-delivery-time\"]",
+            "attr": null
+          },
+          {
+            "name": "promotion",
+            "selector": "[data-testid=\"tag-text\"]",
+            "attr": null
+          },
+          {
+            "name": "price",
+            "selector": null,
+            "attr": null,
+            "derive": "currency"
+          }
+        ]
+      },
+      "samples": {
+        "query": "EC2A 3AY"
+      },
+      "provenance": {
+        "evidence": {
+          "control": "Enter a postcode to see what we deliver:",
+          "landedAt": "https://deliveroo.co.uk/restaurants/london/shoreditch?fulfillment_method=DELIVERY&geohash=gcpvnhn3jt6z",
+          "rowsSeen": 12,
+          "why": "list appeared",
+          "sampleRows": [
+            "Song Que Cafe4.8·10 minSpend £10, get £0 delivery fee",
+            "The Salad Project4.8·10 minSpend £10, get £0 delivery fee",
+            "Three Uncles4.8·10 minSpend £10, get £0 delivery fee"
+          ]
+        },
+        "schemaBy": "openai/gpt-4.1-mini",
+        "discoveredBy": "read-probe"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "6 rows, all of url, name, deliveryTime non-empty",
+        "at": "2026-08-22T16:09:39.013Z",
+        "rows": 6,
+        "sample": [
+          {
+            "url": "https://deliveroo.co.uk/menu/London/shoreditch/pizza-pilgrims-shoreditch?day=today&geohash=gcpvnhn3jt3p&time=ASAP",
+            "name": "Pizza Pilgrims",
+            "deliveryTime": "10 min",
+            "promotion": "Spend £10, get £0 delivery fee",
+            "price": "£10"
+          },
+          {
+            "url": "https://deliveroo.co.uk/menu/London/haggerston/song-que-cafe?day=today&geohash=gcpvnhn3jt3p&time=ASAP",
+            "name": "Song Que Cafe",
+            "deliveryTime": "10 min",
+            "promotion": "Spend £10, get £0 delivery fee",
+            "price": "£10"
+          },
+          {
+            "url": "https://deliveroo.co.uk/menu/London/spitalfields/pho-spitalfields?day=today&geohash=gcpvnhn3jt3p&time=ASAP",
+            "name": "Pho",
+            "deliveryTime": "10 min",
+            "promotion": "Spend £25, get 20% off",
+            "price": "£25"
+          }
+        ],
+        "calledWith": {
+          "query": "EC2A 3AY"
+        }
+      }
+    },
+    {
+      "name": "listMenuItems",
+      "kind": "read",
+      "description": "Schema for menu items including name, price, and tags like popularity or dietary info. Returns name, price per row.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "public item-page URL returned by a compiled listing tool"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "rowSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name of the menu item, e.g. pizza name, always present."
+          },
+          "price": {
+            "type": "string",
+            "description": "The first displayed currency amount for this item."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "recipe": {
+        "via": "url",
+        "origin": "https://deliveroo.co.uk",
+        "urlTemplate": "{url}",
+        "params": {
+          "url": "public item-page URL returned by a compiled listing tool"
+        },
+        "container": "ul[class*=\"UILayoutList-\"]:has(> li div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > p:nth-child(1))",
+        "rowSelector": "li",
+        "fields": [
+          {
+            "name": "name",
+            "selector": "div:nth-child(1) > div:nth-child(2) > div:nth-child(1) > div:nth-child(1) > p:nth-child(1)",
+            "attr": null
+          },
+          {
+            "name": "price",
+            "selector": null,
+            "attr": null,
+            "derive": "currency"
+          }
+        ]
+      },
+      "samples": {
+        "url": "https://deliveroo.co.uk/menu/London/shoreditch/pizza-pilgrims-shoreditch?day=today&geohash=gcpvnhn3jt3p&time=ASAP"
+      },
+      "provenance": {
+        "evidence": {
+          "control": null,
+          "landedAt": "https://deliveroo.co.uk/menu/London/shoreditch/pizza-pilgrims-shoreditch?day=today&geohash=gcpvnhn3jt3p&time=ASAP",
+          "rowsSeen": 15,
+          "why": "page is the collection",
+          "sampleRows": [
+            "MargheritaThe timeless classic, done the Pizza Pilgrims way. San Marzano tomato DOP, Fior di Latte mozzarella, basil & extra virgin olive oil. Simple, soulful, ",
+            "Double Pepperoni & Hot HoneyHighly rated · A fan favourite with serious flavour. Our classic Margherita base loaded with two types of pepperoni, finished with a",
+            "Bufala di MargheritaFor those who like a little extra. Our Margherita, upgraded to the creamiest mozzarella in Italy. Mozzarella di Bufala DOP, San Marzano toma"
+          ]
+        },
+        "schemaBy": "openai/gpt-4.1-mini",
+        "discoveredBy": "read-probe"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "40 rows, all of name non-empty",
+        "at": "2026-08-22T16:10:08.101Z",
+        "rows": 40,
+        "sample": [
+          {
+            "name": "Festa di Famiglia",
+            "price": "£35.00"
+          },
+          {
+            "name": "Yellow Piennolo",
+            "price": "£14.00"
+          },
+          {
+            "name": "Pilgrimage for 6 🍕🍕🍕🍕🍕🍕",
+            "price": "£111.00"
+          }
+        ],
+        "calledWith": {
+          "url": "https://deliveroo.co.uk/menu/London/shoreditch/pizza-pilgrims-shoreditch?day=today&geohash=gcpvnhn3jt3p&time=ASAP"
+        }
+      }
+    }
+  ]
+}

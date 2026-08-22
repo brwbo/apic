@@ -1,0 +1,221 @@
+{
+  "app": "govuk-services",
+  "target": "https://www.gov.uk/search/services",
+  "generatedBy": "apic",
+  "tools": [
+    {
+      "name": "searchResults",
+      "kind": "read",
+      "description": "List of driving licence related services on GOV.UK Returns url, name per row.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search\nServices"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "rowSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Link to the service page, relative URL"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the service"
+          }
+        },
+        "required": [
+          "url",
+          "name"
+        ]
+      },
+      "recipe": {
+        "via": "form",
+        "origin": "https://www.gov.uk",
+        "seedUrl": "https://www.gov.uk/search/services",
+        "submit": "Search",
+        "inputs": [
+          {
+            "selector": "[name=\"keywords\"]:visible",
+            "schemaKey": "query"
+          }
+        ],
+        "params": {
+          "query": "Search\nServices"
+        },
+        "container": "ul.gem-c-document-list.govuk-\\!-margin-bottom-5:has(> li.gem-c-document-list__item a.govuk-link.gem-print-force-link-styles.govuk-link--no-underline)",
+        "rowSelector": "li.gem-c-document-list__item",
+        "fields": [
+          {
+            "name": "url",
+            "selector": "a.govuk-link.gem-print-force-link-styles.govuk-link--no-underline",
+            "attr": "href"
+          },
+          {
+            "name": "name",
+            "selector": "a.govuk-link.gem-print-force-link-styles.govuk-link--no-underline",
+            "attr": null
+          }
+        ]
+      },
+      "samples": {
+        "query": "driving licence"
+      },
+      "provenance": {
+        "evidence": {
+          "control": "Search\nServices",
+          "landedAt": "https://www.gov.uk/search/services?keywords=driving+licence&order=relevance",
+          "rowsSeen": 20,
+          "why": "list rows changed",
+          "sampleRows": [
+            "Apply for your first provisional driving licence Apply for your first provisional driving licence from DVLA online to drive a car, motorbike or moped.",
+            "Renew your driving licence Apply online to renew your 10-year driving licence, full or provisional - cost, payment methods, documents and information you need",
+            "View or share your driving licence information Find out what information DVLA holds about your driving licence or create a check code to share your driving reco"
+          ]
+        },
+        "schemaBy": "openai/gpt-4.1-mini",
+        "discoveredBy": "read-probe"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "20 rows, all of url, name non-empty",
+        "at": "2026-08-22T16:01:31.890Z",
+        "rows": 20,
+        "sample": [
+          {
+            "url": "https://www.gov.uk/apply-first-provisional-driving-licence",
+            "name": "Apply for your first provisional driving licence"
+          },
+          {
+            "url": "https://www.gov.uk/renew-driving-licence",
+            "name": "Renew your driving licence"
+          },
+          {
+            "url": "https://www.gov.uk/view-driving-licence",
+            "name": "View or share your driving licence information"
+          }
+        ],
+        "calledWith": {
+          "query": "driving licence"
+        }
+      }
+    },
+    {
+      "name": "listSteps",
+      "kind": "read",
+      "description": "Step navigation items for applying for a provisional driving licence Returns stepTitle, linkText, linkUrl per row.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "public item-page URL returned by a compiled listing tool"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
+      "rowSchema": {
+        "type": "object",
+        "properties": {
+          "stepTitle": {
+            "type": "string",
+            "description": "The title text of the step, describing the step's purpose or content."
+          },
+          "linkText": {
+            "type": "string",
+            "description": "The visible text of a link related to the step, providing additional navigation or information."
+          },
+          "linkUrl": {
+            "type": "string",
+            "description": "The URL of a link related to the step, for navigation to related content or resources."
+          }
+        },
+        "required": [
+          "stepTitle"
+        ]
+      },
+      "recipe": {
+        "via": "url",
+        "origin": "https://www.gov.uk",
+        "urlTemplate": "{url}",
+        "params": {
+          "url": "public item-page URL returned by a compiled listing tool"
+        },
+        "container": "ol.gem-c-step-nav__steps:has(> li.gem-c-step-nav__step.js-step span.gem-c-step-nav__circle-step-label.govuk-\\!-display-none-print.visuallyhidden:nth-of-type(1))",
+        "rowSelector": "li.gem-c-step-nav__step.js-step",
+        "fields": [
+          {
+            "name": "stepTitle",
+            "selector": "span.gem-c-step-nav__title-text.js-step-title-text:nth-of-type(1)",
+            "attr": null
+          },
+          {
+            "name": "linkText",
+            "selector": "a.gem-c-step-nav__link.js-link",
+            "attr": null
+          },
+          {
+            "name": "linkUrl",
+            "selector": "a.gem-c-step-nav__link.js-link",
+            "attr": "href"
+          }
+        ]
+      },
+      "samples": {
+        "url": "https://www.gov.uk/apply-first-provisional-driving-licence"
+      },
+      "provenance": {
+        "evidence": {
+          "control": null,
+          "landedAt": "https://www.gov.uk/apply-first-provisional-driving-licence",
+          "rowsSeen": 7,
+          "why": "page is the collection",
+          "sampleRows": [
+            "Step 1: Check you're allowed to drive , Show this section Most people can start learning to drive when they’re 17. Check what age you can drive Requirements for",
+            "Step 2: Get a provisional licence , Hide this section You are currently viewing: Apply for your first provisional driving licence £34 to £43",
+            "Step 3: Driving lessons and practice , Show this section You need a provisional driving licence to take lessons or practise. The Highway Code Taking driving les"
+          ]
+        },
+        "schemaBy": "openai/gpt-4.1-mini",
+        "discoveredBy": "read-probe"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "7 rows, all of stepTitle non-empty",
+        "at": "2026-08-22T16:01:46.393Z",
+        "rows": 7,
+        "sample": [
+          {
+            "stepTitle": "Check you're allowed to drive",
+            "linkText": "Check what age you can drive",
+            "linkUrl": "https://www.gov.uk/vehicles-can-drive?step-by-step-nav=e01e924b-9c7c-4c71-8241-66a575c2f61f"
+          },
+          {
+            "stepTitle": "Get a provisional licence",
+            "linkText": "You are currently viewing: Apply for your first provisional driving licence £34 to £43",
+            "linkUrl": "#content"
+          },
+          {
+            "stepTitle": "Driving lessons and practice",
+            "linkText": "The Highway Code",
+            "linkUrl": "https://www.gov.uk/guidance/the-highway-code?step-by-step-nav=e01e924b-9c7c-4c71-8241-66a575c2f61f"
+          }
+        ],
+        "calledWith": {
+          "url": "https://www.gov.uk/apply-first-provisional-driving-licence"
+        }
+      }
+    }
+  ]
+}

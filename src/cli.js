@@ -15,6 +15,72 @@ import { config } from './config.js'
 import { groundTruth, score } from './score.js'
 import { writeFileSync, mkdirSync } from 'node:fs'
 
+/**
+ * `apic --read` - the other half of the compiler.
+ *
+ * The write path below proves an action by making a state change the app
+ * confirms, which needs an app you are allowed to change: a login, a sandbox,
+ * a throwaway account. Most of the software worth an API is a public consumer
+ * site where the only honest thing to compile is the read surface. Same
+ * pipeline - probe, perceive a change, synthesize a schema, verify by replay -
+ * against a different definition of evidence: a repeated row structure that
+ * appeared, rather than a write the app announced.
+ *
+ * It returns before any of the write path runs. Nothing below this branch is
+ * reachable with --read, so the two paths cannot interfere - notably, the read
+ * path never opens a session and therefore never logs in.
+ */
+if (process.argv.includes('--read')) {
+  const { compileRead } = await import('./discover-read.js')
+  const targetArg = process.argv.find((arg) => /^https?:\/\//.test(arg))
+  const site = targetArg || process.env.APIC_READ_TARGET
+  if (!site) {
+    console.error('Usage: apic --read https://public-site.example  (or set APIC_READ_TARGET)')
+    process.exit(2)
+  }
+  let origin, app, seedUrls, directUrls
+  try {
+    const target = new URL(site)
+    if (!/^https?:$/.test(target.protocol)) throw new Error('target must use http or https')
+    origin = target.origin
+    app = process.env.APIC_APP || target.hostname.replace(/^www\./, '').split('.')[0]
+    const urls = (value) => value.split(',').map((url) => url.trim()).filter(Boolean).map((url) => new URL(url, origin).toString())
+    seedUrls = urls(process.env.APIC_READ_SEEDS || site)
+    directUrls = urls(process.env.APIC_READ_DIRECT_URL || '')
+  } catch (error) {
+    console.error(`Invalid public-site URL: ${error.message}`)
+    process.exit(2)
+  }
+  if (seedUrls.some((url) => new URL(url).origin !== origin) || directUrls.some((url) => new URL(url).origin !== origin)) {
+    console.error('Read seeds and direct URLs must stay on the target public site.')
+    process.exit(2)
+  }
+  const readVocabulary = await ground({ app, url: site, log: (m) => console.log(`  ! ${m}`) })
+  console.log(`  ${summariseVocab(readVocabulary)}`)
+  console.log(`\n  apic compile --read -> ${site}\n  read-only: no login, no basket, no checkout; <=1 req/s; stop on any challenge page\n`)
+  const res = await compileRead({
+    app,
+    target: site,
+    outDir: process.env.APIC_OUT_DIR || 'generated',
+    headless: !process.argv.includes('--headed'),
+    vocabulary: readVocabulary,
+    // The target defines the surface. The compiler probes its own landing page
+    // (and optional same-site seeds); it never assumes Deliveroo routes or nouns.
+    seeds: seedUrls.map((url) => ({ url, samples: {} })),
+    // Direct collection pages are optional, for a known item page such as a
+    // menu, catalog or product-listing route. They remain same-origin.
+    direct: directUrls.map((url) => ({
+      url,
+      param: 'url',
+      description: 'public page URL on this compiled site, returned by another read tool',
+    })),
+    log: (m) => console.log(`  ${m}`),
+  })
+  if (res.stopped) { console.log(`\n  compile stopped: ${res.stopped}\n`); process.exit(2) }
+  console.log(`\n  ${res.verified.length}/${res.tools.length} read tools verified -> ${res.dir}/\n`)
+  process.exit(res.verified.length ? 0 : 1)
+}
+
 // Seeds are per-target: nothing about the compiler knows Vikunja's routes.
 //
 // That claim used to be half true. SEEDS was environment-driven and the three

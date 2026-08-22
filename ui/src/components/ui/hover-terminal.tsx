@@ -5,12 +5,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Check, Terminal } from "lucide-react";
 
 export interface HoverTerminalProps {
-  /** The command revealed and copied on click. */
+  /** The command revealed on hover, and copied on click unless `href` is set. */
   command: string;
   /** Collapsed button label. */
   label?: string;
   /** Expanded width. Set it to fit `command` — this cannot be measured before it renders. */
   width?: number;
+  /**
+   * Turns the control into a link. Clicking navigates instead of copying — for
+   * when one command is a teaser and the real answer is a section listing every
+   * client. The hover reveal is unchanged.
+   */
+  href?: string;
 }
 
 /**
@@ -18,7 +24,7 @@ export interface HoverTerminalProps {
  * Adapted from the 21st.dev original, which hardcoded `pip install <pkg>` and shipped
  * its own full-page wrapper.
  */
-export function HoverTerminal({ command, label = "Install", width = 560 }: HoverTerminalProps) {
+export function HoverTerminal({ command, label = "Install", width = 560, href }: HoverTerminalProps) {
   const [state, setState] = useState<"idle" | "hovered" | "copied">("idle");
 
   useEffect(() => {
@@ -29,6 +35,7 @@ export function HoverTerminal({ command, label = "Install", width = 560 }: Hover
 
   const copy = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (href) return; // the anchor navigates; nothing to copy
     try {
       await navigator.clipboard.writeText(command);
       setState("copied");
@@ -38,13 +45,16 @@ export function HoverTerminal({ command, label = "Install", width = 560 }: Hover
     }
   };
 
+  const Root = href ? motion.a : motion.button;
+
   return (
-    <motion.button
+    <Root
       layout
+      href={href}
       onClick={copy}
       onHoverStart={() => state !== "copied" && setState("hovered")}
       onHoverEnd={() => state !== "copied" && setState("idle")}
-      aria-label={`Copy: ${command}`}
+      aria-label={href ? `${label}: see the snippet for every client` : `Copy: ${command}`}
       className={`relative flex h-12 items-center justify-center overflow-hidden rounded-lg border font-mono text-sm transition-colors duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 ${
         state === "hovered"
           ? "border-white/25 bg-white/[0.06]"
@@ -94,7 +104,7 @@ export function HoverTerminal({ command, label = "Install", width = 560 }: Hover
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.button>
+    </Root>
   );
 }
 

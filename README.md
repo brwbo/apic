@@ -12,6 +12,36 @@ London, 22 August 2026.
 **→ [apic-ui.vercel.app](https://apic-ui.vercel.app) — the demo video is there,
 along with what each partner model decides and what the compiler measured.**
 
+## Public consumer sites
+
+`apic --read https://example.com` compiles the public, read-only surface of any
+consumer site into MCP tools. It begins at that site (plus optional same-site
+seeds), discovers search boxes, filters and repeated result cards, then emits
+only tools whose rows survive a cold replay. It does not assume Deliveroo
+routes, restaurant vocabulary, an account, a basket or checkout.
+
+For a known collection/item page, pass it explicitly as a same-site direct
+seed: `APIC_READ_DIRECT_URL=https://example.com/catalog/item apic --read https://example.com`.
+Agent-supplied URLs are constrained to the origin compiled into the recipe.
+
+### One prompt, no target URL
+
+When APIC is connected as its MCP server, use `fulfill_request` instead of
+`compile_app` for a normal consumer question:
+
+```json
+{ "request": "Find me the cheapest pizza near 17 & 18 Clere Street" }
+```
+
+The server uses Tavily to find public candidate services, OpenAI to select and
+operate the compiled flow, h to prioritise ambiguous read controls, Pioneer to
+classify whether probes surfaced meaningful results, and fal only where that
+classification needs visual adjudication. It tries a small origin-distinct
+fallback set if a candidate is challenged or has no replayable public flow.
+It never logs in, orders, checks out, or bypasses a challenge. The surviving
+tools are cold-verified, returned as evidence, and registered on the same MCP
+server for later calls.
+
 ---
 
 ## Demo

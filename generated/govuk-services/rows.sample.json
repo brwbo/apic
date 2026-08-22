@@ -1,0 +1,33 @@
+{
+  "searchResults": [
+    {
+      "url": "https://www.gov.uk/apply-first-provisional-driving-licence",
+      "name": "Apply for your first provisional driving licence"
+    },
+    {
+      "url": "https://www.gov.uk/renew-driving-licence",
+      "name": "Renew your driving licence"
+    },
+    {
+      "url": "https://www.gov.uk/view-driving-licence",
+      "name": "View or share your driving licence information"
+    }
+  ],
+  "listSteps": [
+    {
+      "stepTitle": "Check you're allowed to drive",
+      "linkText": "Check what age you can drive",
+      "linkUrl": "https://www.gov.uk/vehicles-can-drive?step-by-step-nav=e01e924b-9c7c-4c71-8241-66a575c2f61f"
+    },
+    {
+      "stepTitle": "Get a provisional licence",
+      "linkText": "You are currently viewing: Apply for your first provisional driving licence £34 to £43",
+      "linkUrl": "#content"
+    },
+    {
+      "stepTitle": "Driving lessons and practice",
+      "linkText": "The Highway Code",
+      "linkUrl": "https://www.gov.uk/guidance/the-highway-code?step-by-step-nav=e01e924b-9c7c-4c71-8241-66a575c2f61f"
+    }
+  ]
+}

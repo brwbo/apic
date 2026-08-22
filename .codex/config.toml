@@ -1,3 +1,6 @@
-# OpenAI Codex CLI project config. Instructions come from ../AGENTS.md.
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
+
+[mcp_servers.apic]
+command = "node"
+args = ["/Users/brwbo/Projects/apic/src/server.js"]

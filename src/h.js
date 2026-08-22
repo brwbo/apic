@@ -93,6 +93,24 @@ export async function nextAction(page, { goal, candidates, tried = [] }) {
   return { label, why: String(parsed.why || '').slice(0, 60), done: Boolean(parsed.done) }
 }
 
+/** Choose the next public, read-only affordance worth probing. */
+export async function nextReadAction(page, { candidates = [] }) {
+  if (!available() || !candidates.length) return null
+  let shot
+  try { shot = (await page.screenshot({ type: 'jpeg', quality: 60, fullPage: false })).toString('base64') } catch { return null }
+  try {
+    const response = await client().chat.completions.create({
+      model: MODEL, temperature: 0, max_tokens: 100,
+      messages: [
+        { role: 'system', content: 'Choose the one public, read-only control most likely to reveal useful result rows, prices, availability or a search. Ignore login, signup, legal, checkout and account controls. Reply JSON only: {"label":"exact candidate"}.' },
+        { role: 'user', content: [{ type: 'text', text: `Candidates:\n${candidates.map((c) => `- ${c}`).join('\n')}` }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${shot}` } }] },
+      ],
+    })
+    const label = parseJson(response.choices?.[0]?.message?.content || '')?.label
+    return candidates.find((candidate) => candidate === label) || null
+  } catch { return null }
+}
+
 /**
  * Classify the controls the keyless vocabulary refused.
  *

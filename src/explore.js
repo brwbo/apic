@@ -134,7 +134,11 @@ export async function affordances(page) {
       const r = el.getBoundingClientRect()
       if (!r.width || !r.height) continue
       // Sidebar/breadcrumb chrome can nest inside main - exclude by ancestry.
-      if (el.closest('aside, .menu-container, [role="toolbar"], .editor-toolbar')) continue
+      // Footer/legal links are navigation chrome, not part of the app surface.
+      // A public site's body often has no <main>, so the fallback must reject
+      // these regions explicitly or "Terms" becomes a convincingly verified
+      // but useless API tool.
+      if (el.closest('aside, header, footer, nav, .menu-container, [role="toolbar"], .editor-toolbar')) continue
       if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue
       // Record every handle, not the winner of a || chain.
       //
