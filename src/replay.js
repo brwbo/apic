@@ -58,7 +58,26 @@ export async function replay(tool, args, { headless = true, session = null } = {
     // nav link - so opening one navigated off the task and renamed whatever
     // heading the next page happened to have.
     if (!tool.recipe.inline) {
-      await opener(page, tool)
+      // Now that a recipe says when it has no opener, finding nothing to click is
+      // drift rather than a no-op, and it should say so here. It used to surface
+      // a page later as arguments that never reached a field - the modal never
+      // opened, so there was nothing to type into - which reads like a bad schema
+      // instead of the stale locator it actually is.
+      const opened = await opener(page, tool)
+      // A missing opener is only drift if what it was meant to reveal is missing
+      // too. Some controls are their own field - a quick-add box sitting on the
+      // page - and recipe.inline does not catch every one of them, because the
+      // control and the field can be named differently ("Create a task." opening
+      // "Add a task…"). Asking whether this call's fields are reachable settles
+      // it without guessing: all of them present means no opener was needed;
+      // any of them missing means the one recorded here no longer resolves.
+      if (!opened && !(await allFillable(page, tool.recipe.fields.filter((f) => args[f.schemaKey] !== undefined)))) {
+        return {
+          ok: false, effect: 'none', expected: tool.recipe.expect, unfilled: [], added: [], removed: [],
+          error: `no control on ${page.url()} matched what this tool opens with: ` +
+            [tool.provenance?.evidence?.control, tool.recipe.click].filter(Boolean).map((t) => `"${t}"`).join(' or '),
+        }
+      }
       await page.waitForTimeout(700)
     }
 
@@ -111,6 +130,10 @@ export async function replay(tool, args, { headless = true, session = null } = {
       ok: d.changed && d.kind === tool.recipe.expect && unfilled.length === 0,
       effect: d.kind, expected: tool.recipe.expect, unfilled,
       added: d.added.slice(0, 3),
+      // What left the page is evidence too, and for some tools it is the only
+      // evidence there is: a deletion has nothing to echo and no value to show,
+      // so the rows that disappeared are the whole proof it happened.
+      removed: d.removed.slice(0, 3),
     }
   } finally { if (own) await closeSession(s) }
 }
@@ -181,14 +204,19 @@ const path = (href, origin) => { try { return new URL(href, origin).pathname } c
  * `recipe.click` is the canonical gesture ("create task") because that is what
  * named the tool - no button carries that text. The control actually clicked at
  * compile time is kept in the evidence, so try that first, then the canonical
- * phrase, then give up quietly: inline actions like Kanban quick-add have no
- * opener at all, and throwing on a missing one fails a tool that is working.
+ * phrase. Returns whether anything was clicked; the caller decides what that
+ * means, because a recipe marked inline has no opener to find and one without
+ * that mark has lost the control it was compiled against.
  */
 async function opener(page, tool) {
-  const control = tool.provenance?.evidence?.control
+  const ev = tool.provenance?.evidence || {}
+  // `controls` is every handle the control had at compile time - aria-label,
+  // innerText, title. Older artifacts only carry the single `control`, so fall
+  // back to it rather than requiring a recompile.
+  const recorded = ev.controls?.length ? ev.controls : [ev.control]
   const attr = (v) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   const tries = []
-  for (const text of [control, tool.recipe.click].filter(Boolean)) {
+  for (const text of [...new Set([...recorded, tool.recipe.click].filter(Boolean))]) {
     tries.push(page.locator('button:visible, a[href]:visible, [role="button"]:visible').filter({ hasText: text }).first())
     tries.push(page.locator(`[aria-label="${attr(text)}"]:visible`).first())
   }
@@ -196,6 +224,19 @@ async function opener(page, tool) {
     try { await el.click({ timeout: 2500 }); return true } catch { /* next handle */ }
   }
   return false
+}
+
+/** Can every one of these fields be typed into right now, without opening anything? */
+async function allFillable(page, fields) {
+  if (!fields.length) return false
+  for (const f of fields) {
+    let reachable = false
+    for (const sel of locators(f)) {
+      if (await page.locator(sel).first().isEditable({ timeout: 1000 }).catch(() => false)) { reachable = true; break }
+    }
+    if (!reachable) return false
+  }
+  return true
 }
 
 /**
