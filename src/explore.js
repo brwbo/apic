@@ -26,48 +26,69 @@ export async function launch({ headless = true } = {}) {
 }
 
 /** Vikunja login. Kept separate: auth is app-specific and not part of discovery. */
-export async function login(page, { url, user, pass } = config.target) {
-  await page.goto(`${url}/login`, { waitUntil: 'domcontentloaded' })
-  // The submit click is swallowed if it lands before Vue attaches its handler:
-  // the button exists in the DOM well before the app hydrates, so Playwright
-  // clicks a dead element and no request is ever made. Measured at a ~30-50%
-  // cold-start failure rate, which is why this waits, then retries.
-  await page.waitForLoadState('networkidle').catch(() => {})
+/**
+ * Login is app-specific, so it is DISCOVERED rather than configured.
+ *
+ * Every login form has the same shape: a password input, a text input above it,
+ * and a button that submits them. Finding it structurally means a new target
+ * needs a URL and credentials, not a code change - which is the difference
+ * between a compiler and a Vikunja script.
+ */
+const LOGIN_PATHS = ['/login', '/user/login', '/signin', '/auth/login', '/users/sign_in']
+const AUTH_PATH = /login|signin|sign_in|auth/i
+const SUBMIT_TEXT = /sign ?in|log ?in|continue|submit/i
 
-  // A valid stored session redirects /login away. Filling a form that is not
-  // there burns the full Playwright timeout and reads as a broken target -
-  // which is exactly the spurious failure the session cache exists to avoid.
-  if (!page.url().includes('/login')) return page.url()
+async function findLoginForm(page) {
+  const pw = page.locator('input[type="password"]:visible').first()
+  if (!(await pw.count())) return null
+  const user = page.locator('input[type="text"]:visible, input[type="email"]:visible, input:not([type]):visible').first()
+  if (!(await user.count())) return null
+  let submit = page.locator('button[type="submit"]:visible, input[type="submit"]:visible').first()
+  if (!(await submit.count())) submit = page.locator('button:visible').filter({ hasText: SUBMIT_TEXT }).first()
+  return { user, pw, submit }
+}
+
+export async function login(page, target = config.target) {
+  const { url, user, pass } = target
+  const paths = target.loginPath ? [target.loginPath, ...LOGIN_PATHS] : LOGIN_PATHS
+
+  let form = null, landedOn = null
+  for (const path of paths) {
+    await page.goto(`${url}${path}`, { waitUntil: 'domcontentloaded' }).catch(() => {})
+    // The submit click is swallowed if it lands before the framework attaches
+    // its handler: the button exists in the DOM well before the app hydrates,
+    // so Playwright clicks a dead element and no request is ever made.
+    await page.waitForLoadState('networkidle').catch(() => {})
+
+    // A valid stored session redirects the login route away. Filling a form
+    // that is not there burns the full Playwright timeout and reads as a
+    // broken target - the false failure the session cache exists to prevent.
+    if (!AUTH_PATH.test(new URL(page.url()).pathname)) return page.url()
+
+    form = await findLoginForm(page)
+    if (form) { landedOn = path; break }
+  }
+  if (!form) throw new Error(`no login form found at ${url} (tried ${paths.join(', ')})`)
 
   let status = 0
-  const watch = (r) => { if (r.url().includes('/api/v1/login')) status = r.status() }
-  page.on('response', watch)
+  page.on('response', (r) => { if (/login|signin|session/i.test(r.url())) status = r.status() })
 
-  try {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      await page.fill('#username', user)
-      await page.fill('#password', pass)
-      await page.click('button[type="submit"], button:has-text("Login")')
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await form.user.fill(user)
+    await form.pw.fill(pass)
+    await form.submit.click({ timeout: 4000 }).catch(() => {})
 
-      // Client-side routing means no navigation lifecycle event to wait on.
-      const landed = await page
-        .waitForFunction(() => !location.pathname.includes('/login'), null, { timeout: 5000, polling: 150 })
-        .then(() => true)
-        .catch(() => false)
-      if (landed) return page.url()
+    // Client-side routing means there is no navigation lifecycle to wait on.
+    const landed = await page
+      .waitForFunction(() => !/login|signin/i.test(location.pathname), null, { timeout: 6000, polling: 150 })
+      .then(() => true).catch(() => false)
+    if (landed) return page.url()
 
-      // Retrying into a rate limiter only deepens the hole - fail loudly instead.
-      if (status === 429) {
-        throw new Error(
-          'Vikunja rate-limited the login (HTTP 429). Every replay() logs in fresh, ' +
-          'so a watch cycle over N tools costs N logins. Reuse a stored session or ' +
-          'raise the target\'s rate limit.',
-        )
-      }
-      await page.waitForTimeout(attempt * 1000) // back off before trying again
-    }
-    throw new Error(`login failed after 3 attempts as ${user} at ${url}${status ? ` (last login status ${status})` : ''}`)
-  } finally { page.off('response', watch) }
+    // Retrying into a rate limiter only deepens the hole - fail loudly instead.
+    if (status === 429) throw new Error(`${url} rate-limited the login (HTTP 429). Reuse a stored session or raise the target's rate limit.`)
+    await page.waitForTimeout(700)
+  }
+  throw new Error(`login failed at ${url}${landedOn} after 3 attempts (last status ${status})`)
 }
 
 /**
@@ -92,9 +113,23 @@ export async function affordances(page) {
       // Sidebar/breadcrumb chrome can nest inside main - exclude by ancestry.
       if (el.closest('aside, .menu-container, [role="toolbar"], .editor-toolbar')) continue
       if (el.disabled || el.getAttribute('aria-disabled') === 'true') continue
-      const label = (el.getAttribute('aria-label') || el.innerText || '').trim().replace(/\s+/g, ' ').slice(0, 60)
+      // Record every handle, not the winner of a || chain.
+      //
+      // One page mixes three conventions: a project card is aria-labelled with
+      // an empty innerText, "NEW PROJECT" is innerText with no aria-label, and
+      // the bucket picker reads "To-Do" but is labelled "Kanban bucket: To-Do".
+      // Collapsing to one string throws away the other handle, and if the one
+      // that won is state-dependent - an empty-collection call to action, say -
+      // the recorded control stops resolving the moment the state changes and
+      // the emitted tool can never be replayed.
+      const clean = (v) => (v || '').trim().replace(/\s+/g, ' ').slice(0, 60)
+      const aria = clean(el.getAttribute('aria-label'))
+      const text = clean(el.innerText)
+      const title = clean(el.getAttribute('title'))
+      const label = aria || text
       if (!label) continue
-      out.push({ label, href: el.getAttribute('href') || null })
+      const handles = [...new Set([aria, text, title].filter(Boolean))]
+      out.push({ label, handles, href: el.getAttribute('href') || null })
     }
     return out
   })
