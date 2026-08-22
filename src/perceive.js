@@ -59,12 +59,23 @@ function announced(added) {
  * announce-and-stay (labels), announce-and-navigate (projects) and
  * silent-append (kanban quick-add).
  */
+/**
+ * Apps rewrite what you give them. Gitea takes the repository name
+ * "apic probe 60946" and serves it back as the slug "apic-probe-60946", which
+ * an exact substring match misses completely - so a repository that was
+ * demonstrably created reads as no write at all. Compare on letters and digits
+ * only, which sees through slugs, casing and punctuation while a needle this
+ * long stays far too specific to collide by accident.
+ */
+const alnum = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '')
+
 export function echoed(added, value) {
   if (!value || String(value).length < 4) return null
-  const needle = String(value).toLowerCase()
+  const needle = alnum(value)
+  if (needle.length < 4) return null
   // The field we typed into echoes trivially. Only rendered content counts:
   // seeing the value in a list item or link means the app STORED it.
-  const hit = added.find((i) => !/^(input|textarea|select)\|/.test(i) && i.toLowerCase().includes(needle))
+  const hit = added.find((i) => !/^(input|textarea|select)\|/.test(i) && alnum(i).includes(needle))
   // `via: echo` matters downstream: the value being on screen proves a write
   // happened, but not what kind. That is the ambiguity the vision tier resolves.
   return hit ? { text: hit.split('|').pop().slice(0, 80), kind: 'creation', via: 'echo' } : null
