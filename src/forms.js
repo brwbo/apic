@@ -85,3 +85,22 @@ export async function submitButton(page) {
   }
   return null
 }
+
+/**
+ * The button that confirms a destructive action in a modal.
+ *
+ * Deleting a task is two clicks, not one: DELETE opens a dialog whose confirm
+ * button says "DO IT!". That is not a submit verb and never will be, so the
+ * confirmation button is looked for separately and only inside a dialog - a
+ * page-wide search for /^do it|yes/ would eventually click something else.
+ */
+const CONFIRM = /^(do it|yes|confirm|delete|remove|ok)\b/i
+
+export async function confirmButton(page) {
+  const buttons = await page.$$('.modal button:visible, .modal-content button:visible, [role="dialog"] button:visible')
+  for (const b of buttons) {
+    const t = ((await b.innerText()) || '').trim()
+    if (CONFIRM.test(t)) return { handle: b, label: t }
+  }
+  return null
+}

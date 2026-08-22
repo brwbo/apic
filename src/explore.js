@@ -34,6 +34,11 @@ export async function login(page, { url, user, pass } = config.target) {
   // cold-start failure rate, which is why this waits, then retries.
   await page.waitForLoadState('networkidle').catch(() => {})
 
+  // A valid stored session redirects /login away. Filling a form that is not
+  // there burns the full Playwright timeout and reads as a broken target -
+  // which is exactly the spurious failure the session cache exists to avoid.
+  if (!page.url().includes('/login')) return page.url()
+
   let status = 0
   const watch = (r) => { if (r.url().includes('/api/v1/login')) status = r.status() }
   page.on('response', watch)
