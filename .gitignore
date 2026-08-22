@@ -1,8 +1,25 @@
+# ---- secrets: never commit ----
 .env
-.env.local
+.env.*
+!.env.example
 *.key
+*.pem
+secrets.json
+credentials.json
+.config/
+auth.json
+
+# ---- deps ----
 node_modules/
+ui/node_modules/
+
+# ---- runtime artifacts ----
 out/
 tmp/
 *.log
 recordings/*.webm
+playwright-report/
+test-results/
+
+# ---- os ----
+.DS_Store
