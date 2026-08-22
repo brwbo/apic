@@ -3,6 +3,8 @@ import { discoverOn, discoverInline, discoverTask, describe, links } from './dis
 import { discoverMove } from './kanban.js'
 import { gesture, learnVocabulary, vocabulary } from './plan.js'
 import { ground, appName, summarise as summariseVocab } from './ground.js'
+import { discoverSeeds, summarise as summariseSeeds } from './seeds.js'
+import { discoverForm } from './formpage.js'
 import { openSession, ensure, closeSession } from './session.js'
 import { synthesize } from './synthesize.js'
 import { distill, summarise } from './distill.js'
@@ -20,8 +22,15 @@ import { writeFileSync, mkdirSync } from 'node:fs'
 // then lost the whole descent - a repo lives at /apic/my-repo, which no amount
 // of /projects/\d+ will ever match. They are now configuration with Vikunja's
 // values as defaults, which is what the comment always claimed.
+//
+// And configuration is still the fallback, not the mechanism. When APIC_SEEDS
+// is unset, seeds.js discovers the entry points from the app's own navigation
+// and SEEDS is replaced with what it proved - hence `let`. An explicit
+// APIC_SEEDS always wins: configuration beats discovery when someone has
+// bothered to configure.
 const list = (v, d) => (v || d).split(',').map((x) => x.trim()).filter(Boolean)
-const SEEDS = list(process.env.APIC_SEEDS, '/projects,/labels')
+const CONFIGURED_SEEDS = process.env.APIC_SEEDS
+let SEEDS = list(process.env.APIC_SEEDS, '/projects,/labels')
 // Which URL is a container worth descending into, and which is one of its items.
 const PROJECT_SEED = new RegExp(process.env.APIC_CONTAINER_SEED || '\\/projects\\/\\d+')
 const TASK_SEED = new RegExp(process.env.APIC_ITEM_SEED || '\\/tasks\\/\\d+')
@@ -84,6 +93,26 @@ try {
     if (!reused) console.log(`  \x1b[33m!\x1b[0m re-authenticated before ${label}`)
   }
 
+  // Now find where to start. The vocabulary above is what makes this work: a
+  // nav link is a candidate because its path names one of the app's own
+  // objects, so /issues scores on Gitea for the same reason /projects scores on
+  // Vikunja. An explicit APIC_SEEDS always wins - configuration beats discovery
+  // when someone has bothered to configure.
+  if (!CONFIGURED_SEEDS) {
+    // Synonyms matter as much as canonicals here: the docs say "repository"
+    // and the nav says /repo/create.
+    const terms = [...new Set([...vocabulary(), ...(vocab?.nouns || []).flatMap((n) => [n.canonical, ...n.synonyms])])]
+    const discovered = await discoverSeeds(page, {
+      baseUrl: config.target.url,
+      terms,
+      log: (m) => console.log(`  \x1b[33m!\x1b[0m ${m}`),
+    })
+    console.log(`  ${summariseSeeds(discovered, SEEDS)}\n`)
+    if (discovered.length) SEEDS = discovered.map((d) => d.path)
+  } else {
+    console.log(`  seeds: ${SEEDS.join(', ')} (APIC_SEEDS)\n`)
+  }
+
   const actions = []
   const persistence = { checked: 0, persisted: 0, vanished: 0, unknown: 0 }
 
@@ -116,6 +145,9 @@ try {
     // Not every app hides its forms behind a button. Gitea's create-repo form
     // sits on its own page, and button-first probing never reaches it.
     await settle(await discoverInline(page, abs(seed), { onStep: line('\x1b[32m+\x1b[0m') }))
+    // ...and not every form is one field. A dedicated create page has to be
+    // filled whole and submitted once, or its required field stays empty.
+    await settle(await discoverForm(page, abs(seed), { onStep: line('\x1b[35m#\x1b[0m'), log: (m) => console.log(`      \x1b[2m${m}\x1b[0m`) }))
   }
 
   // A board is projects -> tasks -> labels. Follow the project apic just made.
