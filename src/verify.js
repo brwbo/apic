@@ -110,6 +110,13 @@ function judgeDiff(tool, args, result) {
   if (result.unfilled?.length) return { verified: false, reason: `arguments never reached a field: ${result.unfilled.join(', ')} - selectors have drifted`, by }
   if (!result.effect) return { verified: false, reason: 'the page did not change at all', by }
 
+  // A drag has no banner and echoes nothing: the card already existed. The
+  // containment change IS the evidence - it left one column and arrived in
+  // another, which no cosmetic re-render can produce.
+  if (tool.recipe?.drag && tool.recipe.expect === 'relocation' && result.effect === 'relocation') {
+    return { verified: true, reason: result.moved ? `the card relocated: ${result.moved}` : 'the card changed column', by }
+  }
+
   const banner = added.find((a) => /\|(status|alert)\|/.test(a) && SUCCESS.test(a))
   if (banner) return { verified: true, reason: `the app announced it: "${banner.split('|').pop().replace(/\n/g, ' ').slice(0, 60)}"`, by }
 

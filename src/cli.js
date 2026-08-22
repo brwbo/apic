@@ -5,6 +5,7 @@ import { gesture } from './plan.js'
 import { openSession, ensure, closeSession } from './session.js'
 import { synthesize } from './synthesize.js'
 import { distill, summarise } from './distill.js'
+import { checkPersistence, summarise as summarisePersistence } from './persist.js'
 import { emit } from './emit.js'
 import { config } from './config.js'
 import { writeFileSync, mkdirSync } from 'node:fs'
@@ -47,10 +48,34 @@ try {
   }
 
   const actions = []
+  const persistence = { checked: 0, persisted: 0, vanished: 0, unknown: 0 }
+
+  /**
+   * Settle each batch the moment discovery hands it over.
+   *
+   * An echo-confirmed write is re-tested by reloading and looking for what we
+   * submitted: a created task is still there, a filter query the app merely
+   * echoed back is not. Left to the end of the compile instead, `delete task`
+   * from the task seed has already removed the row an earlier `create task` is
+   * being judged on, and a working tool is rejected for a reason that has
+   * nothing to do with whether it works. checkPersistence navigates the page,
+   * so this belongs between batches - every seed re-navigates anyway.
+   */
+  const settle = async (found) => {
+    const s = await checkPersistence(page, found, {
+      baseUrl: config.target.url,
+      onStep: (a, ok) => {
+        if (ok === false) console.log(`      \x1b[31mx\x1b[0m ${a.label} - the value was displayed, not stored`)
+      },
+    })
+    for (const k of Object.keys(persistence)) persistence[k] += s[k] || 0
+    actions.push(...found)
+    return found
+  }
   for (const seed of SEEDS) {
     await guard(seed)
     console.log(`  seed ${seed}`)
-    actions.push(...(await discoverOn(page, abs(seed), { onStep: line('\x1b[32m*\x1b[0m') })))
+    await settle(await discoverOn(page, abs(seed), { onStep: line('\x1b[32m*\x1b[0m') }))
   }
 
   // A board is projects -> tasks -> labels. Follow the project apic just made.
@@ -59,9 +84,9 @@ try {
   if (project) {
     await guard('project seed')
     console.log(`  seed ${project} (discovered)`)
-    actions.push(...(await discoverOn(page, abs(project), { onStep: line('\x1b[32m*\x1b[0m') })))
+    await settle(await discoverOn(page, abs(project), { onStep: line('\x1b[32m*\x1b[0m') }))
     const inline = await discoverInline(page, abs(project), { onStep: line('\x1b[32m+\x1b[0m') })
-    actions.push(...inline)
+    await settle(inline)
     task = inline.map((a) => a.created).find((u) => u && TASK_SEED.test(u))
   }
 
@@ -88,13 +113,14 @@ try {
   // gestures run against the task apic created itself, one paragraph above.
   if (task) {
     console.log(`  seed ${task} (discovered)`)
-    actions.push(...(await discoverTask(page, abs(task), { onStep: line('\x1b[36m>\x1b[0m') })))
+    await settle(await discoverTask(page, abs(task), { onStep: line('\x1b[36m>\x1b[0m') }))
   } else {
     console.log('  \x1b[33m!\x1b[0m no task created - skipping the task detail seed')
   }
 
   const withParams = actions.filter((a) => a.parameters.length).length
   console.log(`\n  ${actions.length} candidate actions (${withParams} with parameters)`)
+  console.log(`  ${summarisePersistence(persistence)}`)
 
   // One batched SLM call for the whole trajectory, after exploring rather than
   // during it. Falls back to the node-count heuristic if the key is absent or

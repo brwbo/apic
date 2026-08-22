@@ -206,7 +206,9 @@ export async function distill(actions, { log } = {}) {
 
 /** One line for the compile log. */
 export function summarise(s) {
-  if (s.source === 'heuristic') return `perception: heuristic${s.reason ? ` (${s.reason})` : ''} - SLM classifier idle`
+  // Provider errors carry a full JSON body; a compile log is one line per stage.
+  const why = s.reason ? s.reason.replace(/\s+/g, ' ').slice(0, 90) : ''
+  if (s.source === 'heuristic') return `perception: heuristic${why ? ` (${why})` : ''} - SLM classifier idle`
   const bits = [`${s.confident}/${s.total} confident`]
   if (s.escalate) bits.push(`${s.escalate} to escalate`)
   if (s.disagreed) bits.push(`${s.disagreed} overruled the node count`)

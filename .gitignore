@@ -8,6 +8,8 @@ secrets.json
 credentials.json
 .config/
 auth.json
+# stored browser session - contains a live auth token
+.apic/
 
 # ---- deps ----
 node_modules/

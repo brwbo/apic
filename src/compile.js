@@ -9,6 +9,7 @@ import { launch, login } from './explore.js'
 import { discoverOn, discoverInline, describe } from './discover.js'
 import { synthesize } from './synthesize.js'
 import { distill, summarise } from './distill.js'
+import { checkPersistence, summarise as summarisePersistence } from './persist.js'
 import { emit } from './emit.js'
 import { config } from './config.js'
 import { writeFileSync, mkdirSync } from 'node:fs'
@@ -65,12 +66,33 @@ export async function compile({
     await login(page, target)
 
     const actions = []
+    const persistence = { checked: 0, persisted: 0, vanished: 0, unknown: 0 }
+
+    /**
+     * Settle each batch the moment it is discovered.
+     *
+     * An echo-confirmed write is re-tested by reloading the page and looking
+     * for what we submitted. Run that at the end of the pipeline instead and a
+     * `delete task` from a later seed has already removed the row an earlier
+     * `create task` is being judged on - so a working tool gets rejected for a
+     * reason that has nothing to do with whether it works.
+     */
+    const settle = async (found) => {
+      const s = await checkPersistence(page, found, {
+        baseUrl: url,
+        onStep: (a, ok) => {
+          if (ok === false) onLog(`      \x1b[31mx\x1b[0m ${a.label} - the value was displayed, not stored`)
+        },
+      })
+      for (const k of Object.keys(persistence)) persistence[k] += s[k]
+      actions.push(...found)
+    }
     for (const seed of seedsFor(goal)) {
       onLog(`  seed ${seed}`)
       const found = await discoverOn(page, `${url}${seed}`, {
         onStep: (s, d) => onLog(step(s) + describe(d).slice(0, 46)),
       })
-      actions.push(...found)
+      await settle(found)
     }
 
     // Tasks live inside a project, so follow one in and explore there.
@@ -80,15 +102,17 @@ export async function compile({
       const found = await discoverOn(page, `${url}${inside}`, {
         onStep: (s, d) => onLog(step(s) + describe(d).slice(0, 46)),
       })
-      actions.push(...found)
+      await settle(found)
       const inline = await discoverInline(page, `${url}${inside}`, {
         onStep: (s, d) => onLog(step({ ...s, label: `${s.label} (inline)` }, '+') + describe(d).slice(0, 46)),
       })
-      actions.push(...inline)
+      await settle(inline)
     }
 
     const withParams = actions.filter((a) => a.parameters.length).length
     onLog(`\n  ${actions.length} candidate actions (${withParams} with parameters)`)
+
+    onLog(`  ${summarisePersistence(persistence)}`)
 
     // One batched SLM call for the whole trajectory, after exploring rather than
     // during it. Falls back to the node-count heuristic if the key is absent or
@@ -98,7 +122,7 @@ export async function compile({
 
     mkdirSync(join(ROOT, 'out'), { recursive: true })
     writeFileSync(join(ROOT, 'out/actions.json'), JSON.stringify(actions, null, 2))
-    writeFileSync(join(ROOT, 'out/perception.json'), JSON.stringify(perception, null, 2))
+    writeFileSync(join(ROOT, 'out/perception.json'), JSON.stringify({ perception, persistence }, null, 2))
 
     const tools = synthesize(actions)
     const { dir, count } = emit(tools, { app: name, outDir, target: url })
@@ -107,6 +131,6 @@ export async function compile({
       onLog(`    ${t.destructive ? '\x1b[31m!\x1b[0m' : ' '} ${t.name}(${Object.keys(t.inputSchema.properties).join(', ')})`))
     onLog('')
 
-    return { app: name, dir, count, tools, actions, perception, url, goal }
+    return { app: name, dir, count, tools, actions, perception, persistence, url, goal }
   } finally { await browser.close() }
 }

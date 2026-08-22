@@ -8,52 +8,6 @@ emitted as an MCP server. The app's own API was never read.
 
 ## Tools
 
-### `createProject`
-
-create project. Confirmed by the app: "Success The project was successfully created."
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "projectTitle": {
-      "type": "string",
-      "description": "Title"
-    },
-    "toSearchForAProject": {
-      "type": "string",
-      "description": "Type to search for a project"
-    }
-  },
-  "required": []
-}
-```
-
-<details><summary>evidence</summary>
-
-```json
-{
-  "control": "NEW PROJECT",
-  "added": [
-    "li||apic probe 79968\nMark this project as favorite\nOpen project ",
-    "a||apic probe 79968",
-    "a||List"
-  ],
-  "removed": [
-    "input||on",
-    "a||NEW SAVED FILTER",
-    "a||NEW PROJECT"
-  ],
-  "from": "/projects",
-  "to": "/projects/40/265",
-  "announced": {
-    "text": "Success The project was successfully created.",
-    "kind": "creation"
-  }
-}
-```
-</details>
-
 ### `createLabel`
 
 create label. Confirmed by the app: "Success The label was successfully created."
@@ -77,7 +31,7 @@ create label. Confirmed by the app: "Success The label was successfully created.
 {
   "control": "NEW LABEL",
   "added": [
-    "a||apic probe 85048",
+    "a||apic probe 26823",
     "div|status|Success\nThe label was successfully created."
   ],
   "removed": [],
@@ -118,18 +72,137 @@ update label. Confirmed by the app: "Success The label was successfully updated.
 {
   "control": "Edit Label",
   "added": [
-    "a||apic probe 90331",
+    "a||apic probe 31976",
     "button||Close",
     "input||The label title goes here…"
   ],
   "removed": [
-    "a||apic labelTitle vmt49ldjt-2"
+    "a||apic probe 20069"
   ],
   "from": "/labels",
   "to": "/labels",
   "announced": {
     "text": "Success The label was successfully updated.",
     "kind": "mutation"
+  }
+}
+```
+</details>
+
+### `createTask`
+
+create task. Confirmed: the submitted value appeared in the app after the action.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "Add a task"
+    }
+  },
+  "required": []
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "control": "Create a task.",
+  "added": [
+    "input||Mark 'apic probe 36249' as done",
+    "a||apic probe 36249",
+    "button||Add to Favorites"
+  ],
+  "removed": [
+    "button||Create a task."
+  ],
+  "from": "/projects/3/13",
+  "to": "/projects/3/13",
+  "announced": {
+    "text": "apic probe 36249",
+    "kind": "creation"
+  }
+}
+```
+</details>
+
+### `moveTask`
+
+move task. Confirmed: the submitted value appeared in the app after the action.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "card": {
+      "type": "string",
+      "description": "Card"
+    },
+    "column": {
+      "type": "string",
+      "description": "Target column"
+    }
+  },
+  "required": [
+    "card",
+    "column"
+  ]
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "announced": {
+    "text": "\"#2 apic probe 40437\" moved from To-Do to Doing",
+    "kind": "relocation"
+  },
+  "added": [],
+  "removed": [],
+  "from": "http://localhost:3456/projects/3/16",
+  "to": "http://localhost:3456/projects/3/16",
+  "control": "Move card between columns"
+}
+```
+</details>
+
+### `assignLabel`
+
+assign label. Confirmed by the app: "Success The label has been created and added successfully."
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "toAddALabel": {
+      "type": "string",
+      "description": "Type to add a label"
+    }
+  },
+  "required": []
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "control": "ADD LABELS",
+  "added": [
+    "button||Remove label apic probe 70250",
+    "input|combobox|Type to add a label…",
+    "div|status|Success\nThe label has been created and added successfully."
+  ],
+  "removed": [],
+  "from": "/tasks/4",
+  "to": "/tasks/4",
+  "announced": {
+    "text": "Success The label has been created and added successfully.",
+    "kind": "creation"
   }
 }
 ```

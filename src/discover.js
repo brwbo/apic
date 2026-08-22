@@ -129,8 +129,8 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
     const d = diff(before, await snapshot(page), used[0]?.value)
     const step = record({
       g, control: label, d, seedUrl,
-      parameters: used.map(({ name, label: l, placeholder, type, required, value, selector }) =>
-        ({ name, label: l, placeholder, type, required, example: value, selector })),
+      parameters: used.map(({ name, label: l, placeholder, type, required, value, selector, selectors }) =>
+        ({ name, label: l, placeholder, type, required, example: value, selector, selectors })),
     })
     step.committed = committed
     if (d.changed) found.push(step)

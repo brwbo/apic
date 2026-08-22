@@ -22,8 +22,8 @@ export interface HeroProps {
 export function Hero({
   eyebrow = "{Tech: Europe} × VEED · 22 August 2026",
   wordmark = "apic",
-  headline = "Every app has an API now.",
-  sub = "A computer-use agent explores your UI once. apic compiles what it found into a typed MCP server — then recompiles itself when the UI moves.",
+  headline = "An MCP server that manufactures MCP servers.",
+  sub = "When an agent hits an app with no API, it calls apic. A computer-use agent operates the UI, verifies what actually changed, and hands back typed tools — then repairs them when the UI moves.",
   stages = STAGES,
   videoSrc = "/hero.webm",
   still = false,
@@ -35,14 +35,27 @@ export function Hero({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
+
     if (still) {
       v.pause();
       const seek = () => { v.currentTime = stillTime; };
       if (v.readyState >= 1) seek();
       else v.addEventListener("loadedmetadata", seek, { once: true });
-    } else {
-      void v.play().catch(() => {});
+      return;
     }
+
+    // Autoplay can be deferred until the element has data or the tab is visible.
+    // A silently-swallowed rejection leaves a frozen backdrop, so retry on both.
+    const start = () => { void v.play().catch(() => {}); };
+    start();
+    v.addEventListener("canplay", start);
+    v.addEventListener("loadeddata", start);
+    document.addEventListener("visibilitychange", start);
+    return () => {
+      v.removeEventListener("canplay", start);
+      v.removeEventListener("loadeddata", start);
+      document.removeEventListener("visibilitychange", start);
+    };
   }, [still, stillTime, videoSrc]);
 
   return (
@@ -91,8 +104,8 @@ export function Hero({
         </h1>
 
         <p
-          className="mt-5 font-bold leading-[1.06] tracking-[-0.03em] text-white"
-          style={{ fontSize: "clamp(1.35rem, 3.9vw, 2.75rem)", textShadow: "0 2px 30px rgba(0,0,0,0.75)" }}
+          className="mt-5 max-w-3xl text-balance font-bold leading-[1.06] tracking-[-0.03em] text-white"
+          style={{ fontSize: "clamp(1.25rem, 3.4vw, 2.4rem)", textShadow: "0 2px 30px rgba(0,0,0,0.75)" }}
         >
           {headline}
         </p>
@@ -114,10 +127,17 @@ export function Hero({
         </div>
       </div>
 
-      <div className="absolute inset-x-0 bottom-0 z-20 flex items-center justify-between px-6 pb-6 font-mono text-[10px] uppercase tracking-[0.2em] text-white/35 sm:px-10">
-        <span>github.com/brwbo/apic</span>
-        <span>OpenAI · fal · Pioneer · Tavily · h</span>
-      </div>
+      {!still && (
+        <a
+          href="#problem"
+          className="absolute inset-x-0 bottom-8 z-20 mx-auto flex w-fit flex-col items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-white/40 transition-colors hover:text-white/75"
+        >
+          Watch it run
+          <svg viewBox="0 0 24 24" className="h-4 w-4 animate-bounce" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden>
+            <path d="M12 5v14M6 13l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </a>
+      )}
     </div>
   );
 }
