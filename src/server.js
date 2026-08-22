@@ -96,10 +96,17 @@ function loadGenerated() {
 
 // One browser and one login shared by every replay. Vikunja rate-limits login,
 // so a server that authenticated per tool call would go red under demo load.
+//
+// APIC_HEADED=1 shows that browser instead of hiding it. A compiled tool call is
+// invisible by design - no model, no screenshots, nothing to watch - so the only
+// way to see that the agent's tool call reached the real app is to watch the app
+// move. Pair it with APIC_WINDOW / APIC_WINDOW_POS (see session.js) to park the
+// window beside the agent that is calling in.
+const HEADED = process.env.APIC_HEADED === '1'
 let shared = null
 async function session() {
   if (shared?.browser?.isConnected()) return shared
-  shared = await openSession({ headless: true })
+  shared = await openSession({ headless: !HEADED })
   return shared
 }
 
