@@ -39,9 +39,9 @@ export function evidenceText(tool, args, result) {
   const strings = Object.values(args || {}).filter((v) => typeof v === 'string' && v.length > 3)
   const control = tool.provenance?.evidence?.control || tool.recipe?.click || null
   const lines = [
-    // Descriptions quote the banner seen at compile time. Strip it: the
-    // judge must read the replay's evidence, not the compile's.
-    `tool: ${tool.name} - ${clip(String(tool.description || '').split(/\.?\s*Confirmed by the app/i)[0], 90)}`,
+    // No tool name or description. With a handful of tools per app the name is
+    // the strongest feature in the text, and the judge must generalise to tools
+    // it has never seen - the held-out bench is split by tool for that reason.
     `predicted effect: ${tool.recipe?.expect || 'unknown'}`,
     `arguments sent: ${strings.length ? strings.map((s) => clip(s, 40)).join('; ') : 'none'}`,
     `observed effect: ${result.effect || (result.error ? 'error' : 'none')}`,
@@ -52,6 +52,12 @@ export function evidenceText(tool, args, result) {
   lines.push(`nodes appeared (${shown.length}): ${shown.slice(0, 6).map(node).join(' | ') || 'none'}`)
   if (self.length) lines.push(`inputs showing their own value (${self.length}): ${self.slice(0, 3).map(node).join(' | ')}`)
   lines.push(`nodes removed (${removed.length}): ${removed.slice(0, 6).map(node).join(' | ') || 'none'}`)
+  // The one fact judgeModel()'s system prompt spells out and an encoder has no
+  // prompt to learn from: where the argument came back. A filter box redisplaying
+  // what was typed is the field showing its own value, not a write.
+  const inContent = strings.some((v) => shown.some((a) => a.includes(v)))
+  const inInputs = strings.some((v) => self.some((a) => a.includes(v)))
+  if (strings.length) lines.push(`argument echoed: ${inContent ? 'in page content' : inInputs ? 'only inside an input field' : 'nowhere'}`)
   lines.push(`control clicked: ${control ? clip(control, 50) : 'none'}`)
   if (result.moved) lines.push(`card moved: ${clip(result.moved, 60)}`)
   return lines.join('\n')
@@ -66,21 +72,43 @@ export function readVerdict(item) {
   return { label, confidence: hit.confidence }
 }
 
-/** Batch: one request for every text. Throws on transport or HTTP failure. */
-export async function classifyVerdicts(texts, { modelId = judgeModelId(), timeoutMs = config.pioneer.timeoutMs } = {}) {
+/** One text, one request. Throws on transport or HTTP failure. */
+export async function classifyOne(text, { modelId = judgeModelId(), timeoutMs = config.pioneer.timeoutMs, retries = 12 } = {}) {
   const res = await fetch(`${config.pioneer.base}/inference`, {
     method: 'POST',
     headers: { 'X-API-Key': config.keys.pioneer, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model_id: modelId, text: texts, schema: JUDGE_SCHEMA, threshold: 0, include_confidence: true, include_spans: false }),
+    body: JSON.stringify({ model_id: modelId, text, schema: JUDGE_SCHEMA, threshold: 0, include_confidence: true, include_spans: false }),
     signal: AbortSignal.timeout(timeoutMs),
   })
+  // 425: a freshly trained model is still "normalizing deployment artifacts".
+  // Observed ~1-2 minutes after a job completes. Wait rather than fall back.
+  if (res.status === 425 && retries > 0) {
+    await new Promise((r) => setTimeout(r, 10000))
+    return classifyOne(text, { modelId, timeoutMs, retries: retries - 1 })
+  }
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw new Error(`pioneer HTTP ${res.status} ${detail.slice(0, 200)}`)
   }
   const body = await res.json()
-  const items = Array.isArray(body.result) ? body.result : [body.result]
-  return { verdicts: items.map(readVerdict), latencyMs: body.latency_ms, tokens: body.token_usage, modelUsed: body.model_used, raw: body, inferenceId: body.inference_id }
+  return { verdict: readVerdict(Array.isArray(body.result) ? body.result[0] : body.result), latencyMs: body.latency_ms, tokens: body.token_usage, modelUsed: body.model_used, raw: body, inferenceId: body.inference_id }
+}
+
+/**
+ * Many texts: one request each, a few in flight. NOT the API's batch form -
+ * on a fine-tuned model, `text: [...]` returns labels that do not line up
+ * with the inputs (12 texts: 6 wrong in batch, 2 wrong singly, same model,
+ * same texts, 2026-08-22). Per-text is ~50ms server-side, so the cost is nil.
+ */
+export async function classifyVerdicts(texts, opts = {}) {
+  const out = new Array(texts.length); let i = 0, latency = 0, tokens = 0, modelUsed
+  await Promise.all(Array.from({ length: Math.min(4, texts.length) }, async () => {
+    for (let k = i++; k < texts.length; k = i++) {
+      const r = await classifyOne(texts[k], opts)
+      out[k] = r.verdict; latency += r.latencyMs || 0; tokens += r.tokens || 0; modelUsed = r.modelUsed
+    }
+  }))
+  return { verdicts: out, latencyMs: latency, tokens, modelUsed }
 }
 
 /** One judgement in verify.js's verdict shape. Throws so the caller can fall back. */

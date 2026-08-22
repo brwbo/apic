@@ -83,6 +83,9 @@ const PERTURB = {
   },
   unfilled_argument: (r, args) => { const k = Object.keys(args)[0]; return k ? { ...r, unfilled: [k] } : null },
   replay_threw: (r) => ({ ...r, error: 'Timeout 30000ms exceeded waiting for selector', effect: null, added: [], removed: [] }),
+  // Label-preserving by construction: the floor ignores order and unrelated nodes.
+  reordered: (r) => r.added?.length > 1 ? { ...r, added: [...r.added].reverse(), removed: [...(r.removed || [])].reverse() } : null,
+  noisy: (r) => ({ ...r, added: [...(r.added || []), 'div|tooltip|Keyboard shortcuts', 'a||Help'], removed: [...(r.removed || []), 'span||Loading…'] }),
 }
 /**
  * Label-preserving: the `apic <field> <token>` arguments become values a person
@@ -108,8 +111,7 @@ function dataset() {
     // The real row, re-rendered (evidenceText may have changed since collect) and
     // a renamed twin of it carrying the same label.
     const variants = [{ args: row.args, result: row.result, source: 'replay', label: row.label }]
-    const twin = renameArgs(row.args, row.result, i)
-    if (twin) variants.push({ ...twin, source: 'replay:renamed', label: row.label })
+    for (const k of [i, i + 3]) { const twin = renameArgs(row.args, row.result, k); if (twin) variants.push({ ...twin, source: 'replay:renamed', label: row.label }) }
     for (const v of variants) {
       rows.push({ text: evidenceText(tool, v.args, v.result), label: v.label, tool: row.tool, source: v.source, slim: tool, args: v.args, result: v.result })
       for (const [name, fn] of Object.entries(PERTURB)) {
@@ -164,9 +166,10 @@ async function train() {
   const job = await api('/felix/training-jobs', { method: 'POST', body: JSON.stringify({
     model_name: `apic-verify-judge-${Date.now().toString(36)}`,
     datasets: [{ name: s.dataset, version: s.datasetVersion }],
-    base_model: BASE, training_type: process.env.PIONEER_TRAINING_TYPE || 'full',
-    validation_data_percentage: 0.15, nr_epochs: Number(process.env.PIONEER_EPOCHS || 12),
-    early_stopping_patience: 3, min_training_steps: 100,
+    // GLiNER2 trains as LoRA only - 'full' is accepted and then fails inside
+    // Modal with no log line (docs.pioneer.ai/guides/fine-tune-classification).
+    base_model: BASE, training_type: 'lora', learning_rate: Number(process.env.PIONEER_LR || 5e-5),
+    validation_data_percentage: 0.15, nr_epochs: Number(process.env.PIONEER_EPOCHS || 8),
   }) })
   console.log(`\n  train: job ${job.id} (${job.status}) on ${BASE}`)
   save({ job: job.id, modelName: job.model_name })
