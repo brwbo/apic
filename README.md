@@ -73,13 +73,21 @@ and replay re-resolves it live, falling back to a stable-first selector chain
 ## Results
 
 Compiled from the UI. **The target's OpenAPI spec is never read during
-compilation** — it's used only as ground truth for scoring, which is why the
-recall number means something.
+compilation** — it is used only as ground truth for scoring, which is why the
+recall number means anything at all.
+
+**The denominator, stated before the number:** 18 is every write operation
+(`POST`/`PUT`/`DELETE`) on `/projects`, `/tasks` and `/labels` in Vikunja's own
+OpenAPI spec, after removing what is not a board gesture — teams, project-level
+permissions, link sharing, attachments, task relations, duplication, bulk
+endpoints and read receipts. Vikunja publishes 105 write operations in total;
+18 is the subset a person can perform on a Kanban board, and each emitted tool
+may claim at most one of them, so recall cannot be inflated by loose matching.
 
 ```
-RECALL     8/18    board write-ops discovered
-PRECISION  9/9     emitted tools that are real
-VERIFIED   8/9     survived a cold replay with unseen arguments
+RECALL     8/18    of the board write-ops in the target's own API
+PRECISION  9/9     emitted tools that map to a real operation
+VERIFIED   8/9     survived a cold replay with arguments never seen before
 ```
 
 Nine tools discovered, eight served. `markTask` is rejected and kept in
@@ -335,6 +343,11 @@ Stated plainly, because a compiler that hides its failure modes isn't one.
   authenticates through the same discovered login with no configuration, but
   discovery returns zero candidates there. Unresolved.
 - **8/18 recall.** Missing: bucket creation, comments, relations and attachments.
+- **Concurrent runs collide.** Every command shares one stored session at
+  `.apic/session.json`, so a compile and a verify started together can destroy
+  each other's browser context mid-run (`Error setting storage state: Execution
+  context was destroyed`). Pass a distinct `APIC_SESSION` per run as a
+  workaround; the real fix is a per-run session file by default.
 - **`markTask` fails verification.** The effect is observed and correct, but
   toggling a checkbox produces no banner and echoes no argument, so nothing
   independently confirms the write. It stays rejected rather than served.
