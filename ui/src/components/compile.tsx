@@ -1,4 +1,5 @@
 import { SectionLabel } from "@/components/section-label";
+import { cn } from "@/lib/utils";
 
 /**
  * Interpreter vs compiler, mapped onto agents. An interpreter re-derives what
@@ -70,26 +71,84 @@ export function Compile() {
           </p>
         </div>
 
-        {/* Per-call comparison */}
-        <div className="mt-12 overflow-x-auto rounded-xl border border-white/12 bg-black/40">
-          <table className="w-full min-w-[560px] border-collapse text-left text-[14px]">
-            <thead>
-              <tr className="border-b border-white/10 font-mono text-[12px] text-white/35">
-                <th className="px-4 py-3 font-normal">per call</th>
-                <th className="px-4 py-3 font-normal">interpreted · Playwright MCP, computer use</th>
-                <th className="px-4 py-3 font-normal text-primary/85">compiled · apic</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PER_CALL.map((r) => (
-                <tr key={r.label} className="border-b border-white/[0.06] last:border-b-0">
-                  <td className="px-4 py-3 text-white/50">{r.label}</td>
-                  <td className="px-4 py-3 text-white/55">{r.interp}</td>
-                  <td className="px-4 py-3 text-white/85">{r.compiled}</td>
+        {/* Per-call comparison.
+
+            Not a bordered box with three equal columns: the compiled column is
+            the argument, so it gets a slab of its own that runs the full height
+            of the table, and the other two sit outside it on the page ground.
+            Pattern lifted from 21st.dev's comparison-3 (7ovr) - highlighted
+            column, hairline row rules, no outer frame - recoloured to the
+            site's sand primary. Below `sm` a 3-column table is unreadable, so
+            each row becomes its own card instead of a sideways scroll. */}
+        <div className="mt-12">
+          <div className="hidden overflow-x-auto pb-1 sm:block">
+            <table className="w-full min-w-[640px] border-separate border-spacing-0 text-left text-[14px]">
+              <thead>
+                <tr>
+                  <th className="w-[30%] px-1 pb-4 align-bottom font-mono text-[11px] font-normal uppercase tracking-[0.18em] text-white/30">
+                    per call
+                  </th>
+                  <th className="w-[38%] px-5 pb-4 align-bottom font-normal">
+                    <span className="block font-mono text-[11px] uppercase tracking-[0.18em] text-white/30">
+                      interpreted
+                    </span>
+                    <span className="mt-1.5 block text-[13px] text-white/45">Playwright MCP, computer use</span>
+                  </th>
+                  <th className="rounded-t-xl border-x border-t-2 border-x-primary/25 border-t-primary/60 bg-primary/[0.09] px-5 pb-4 pt-4 align-bottom font-normal">
+                    <span className="block font-mono text-[11px] uppercase tracking-[0.18em] text-primary/85">
+                      compiled
+                    </span>
+                    <span className="mt-1.5 block text-[13px] text-white/70">apic</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {PER_CALL.map((r, i) => {
+                  const last = i === PER_CALL.length - 1;
+                  return (
+                    <tr key={r.label} className="group">
+                      <td className="border-t border-white/[0.07] px-1 py-4 align-top leading-relaxed text-white/45 transition-colors group-hover:text-white/70">
+                        {r.label}
+                      </td>
+                      <td className="border-t border-white/[0.07] px-5 py-4 align-top leading-relaxed text-white/50">
+                        {r.interp}
+                      </td>
+                      <td
+                        className={cn(
+                          "border-x border-t border-x-primary/25 border-t-primary/15 bg-primary/[0.09] px-5 py-4 align-top font-medium leading-relaxed text-white/90",
+                          last && "rounded-b-xl border-b border-b-primary/25",
+                        )}
+                      >
+                        {r.compiled}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-3 sm:hidden">
+            {PER_CALL.map((r) => (
+              <div key={r.label} className="rounded-xl border border-white/10 bg-black/30 p-4">
+                <p className="text-[13px] leading-relaxed text-white/45">{r.label}</p>
+                <div className="mt-3 space-y-2.5">
+                  <div className="flex gap-3">
+                    <span className="w-[72px] shrink-0 pt-[3px] font-mono text-[9px] uppercase tracking-[0.1em] text-white/25">
+                      interpreted
+                    </span>
+                    <span className="text-[14px] leading-relaxed text-white/55">{r.interp}</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="w-[72px] shrink-0 pt-[3px] font-mono text-[9px] uppercase tracking-[0.1em] text-primary/75">
+                      apic
+                    </span>
+                    <span className="text-[14px] font-medium leading-relaxed text-white/90">{r.compiled}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Why that matters */}
