@@ -170,44 +170,6 @@ move task. Confirmed: the submitted value appeared in the app after the action.
 ```
 </details>
 
-### `assignLabel`
-
-assign label. Confirmed by the app: "Success The label has been created and added successfully."
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "toAddALabel": {
-      "type": "string",
-      "description": "Type to add a label"
-    }
-  },
-  "required": []
-}
-```
-
-<details><summary>evidence</summary>
-
-```json
-{
-  "control": "ADD LABELS",
-  "added": [
-    "button||Remove label apic probe 70250",
-    "input|combobox|Type to add a label…",
-    "div|status|Success\nThe label has been created and added successfully."
-  ],
-  "removed": [],
-  "from": "/tasks/4",
-  "to": "/tasks/4",
-  "announced": {
-    "text": "Success The label has been created and added successfully.",
-    "kind": "creation"
-  }
-}
-```
-</details>
-
 ## Run
 
 ```bash

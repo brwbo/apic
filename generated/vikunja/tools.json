@@ -4,74 +4,6 @@
   "generatedBy": "apic",
   "tools": [
     {
-      "name": "createProject",
-      "description": "create project. Confirmed by the app: \"Success The project was successfully created.\"",
-      "destructive": false,
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "projectTitle": {
-            "type": "string",
-            "description": "Title"
-          },
-          "toSearchForAProject": {
-            "type": "string",
-            "description": "Type to search for a project"
-          }
-        },
-        "required": []
-      },
-      "recipe": {
-        "seedUrl": "http://localhost:3456/projects",
-        "click": "create project",
-        "fields": [
-          {
-            "selector": "[name=\"projectTitle\"]",
-            "name": "projectTitle",
-            "placeholder": "The project's title goes here…",
-            "label": "Title",
-            "schemaKey": "projectTitle"
-          },
-          {
-            "selector": "[placeholder=\"Type to search for a project…\"]",
-            "placeholder": "Type to search for a project…",
-            "label": "Type to search for a project…",
-            "schemaKey": "toSearchForAProject"
-          }
-        ],
-        "submit": true,
-        "expect": "creation"
-      },
-      "provenance": {
-        "evidence": {
-          "control": "Add a brand new project",
-          "added": [
-            "li||apic probe 22526\nMark this project as favorite\nOpen project ",
-            "a||apic probe 22526",
-            "a||List"
-          ],
-          "removed": [
-            "input||on",
-            "a||NEW SAVED FILTER",
-            "a||NEW PROJECT"
-          ],
-          "from": "/projects",
-          "to": "/projects/3/13",
-          "announced": {
-            "text": "Success The project was successfully created.",
-            "kind": "creation"
-          }
-        },
-        "perception": {
-          "kind": "creation",
-          "confidence": null,
-          "source": "heuristic"
-        },
-        "discoveredBy": "heuristic"
-      },
-      "healedAt": "2026-08-22T11:23:35.193Z"
-    },
-    {
       "name": "createLabel",
       "description": "create label. Confirmed by the app: \"Success The label was successfully created.\"",
       "destructive": false,
@@ -121,6 +53,12 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "The app displayed a success message 'Success The label was successfully created.' confirming the label creation.",
+        "at": "2026-08-22T11:26:57.078Z",
+        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -187,7 +125,13 @@
         },
         "discoveredBy": "heuristic"
       },
-      "healedAt": "2026-08-22T11:24:11.138Z"
+      "healedAt": "2026-08-22T11:24:11.138Z",
+      "verification": {
+        "verified": true,
+        "reason": "The app confirmed success with the message 'Success The label was successfully updated.' and the label text 'apic v3 vmt4am1c2-2' appeared in a node different from the input field.",
+        "at": "2026-08-22T11:27:07.728Z",
+        "by": "openai/gpt-4.1-mini"
+      }
     },
     {
       "name": "createTask",
@@ -241,6 +185,12 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "The submitted task 'apic task vmt4am1c2-3' appeared in the app as a new node, confirming creation.",
+        "at": "2026-08-22T11:27:15.237Z",
+        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -290,6 +240,88 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
+      },
+      "verification": {
+        "verified": true,
+        "reason": "The observed effect was relocation with changes in the app, matching the predicted effect and the submitted value appeared in the app after the action.",
+        "at": "2026-08-22T11:27:23.443Z",
+        "by": "openai/gpt-4.1-mini"
+      }
+    }
+  ],
+  "rejected": [
+    {
+      "name": "createProject",
+      "description": "create project. Confirmed by the app: \"Success The project was successfully created.\"",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectTitle": {
+            "type": "string",
+            "description": "Title"
+          },
+          "toSearchForAProject": {
+            "type": "string",
+            "description": "Type to search for a project"
+          }
+        },
+        "required": []
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:3456/projects",
+        "click": "create project",
+        "fields": [
+          {
+            "selector": "[name=\"projectTitle\"]",
+            "name": "projectTitle",
+            "placeholder": "The project's title goes here…",
+            "label": "Title",
+            "schemaKey": "projectTitle"
+          },
+          {
+            "selector": "[placeholder=\"Type to search for a project…\"]",
+            "placeholder": "Type to search for a project…",
+            "label": "Type to search for a project…",
+            "schemaKey": "toSearchForAProject"
+          }
+        ],
+        "submit": true,
+        "expect": "creation"
+      },
+      "provenance": {
+        "evidence": {
+          "control": "Add a brand new project",
+          "added": [
+            "li||apic probe 22526\nMark this project as favorite\nOpen project ",
+            "a||apic probe 22526",
+            "a||List"
+          ],
+          "removed": [
+            "input||on",
+            "a||NEW SAVED FILTER",
+            "a||NEW PROJECT"
+          ],
+          "from": "/projects",
+          "to": "/projects/3/13",
+          "announced": {
+            "text": "Success The project was successfully created.",
+            "kind": "creation"
+          }
+        },
+        "perception": {
+          "kind": "creation",
+          "confidence": null,
+          "source": "heuristic"
+        },
+        "discoveredBy": "heuristic"
+      },
+      "healedAt": "2026-08-22T11:23:35.193Z",
+      "verification": {
+        "verified": false,
+        "reason": "No arguments reached any field and no success announcement or evidence of creation appeared.",
+        "at": "2026-08-22T11:26:49.953Z",
+        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -342,6 +374,12 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
+      },
+      "verification": {
+        "verified": false,
+        "reason": "observed mutation but nothing confirmed a write: no success banner, and no argument echoed outside the field it was typed into",
+        "at": "2026-08-22T11:28:04.443Z",
+        "by": "deterministic diff (no OPENAI_API_KEY - model judge skipped); openai/gpt-4.1-mini disagreed but cannot overturn a rejection"
       }
     },
     {
@@ -388,6 +426,12 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
+      },
+      "verification": {
+        "verified": false,
+        "reason": "observed mutation but nothing confirmed a write: no success banner, and no argument echoed outside the field it was typed into",
+        "at": "2026-08-22T11:28:20.053Z",
+        "by": "deterministic diff (no OPENAI_API_KEY - model judge skipped); openai/gpt-4.1-mini disagreed but cannot overturn a rejection"
       }
     },
     {
@@ -444,6 +488,12 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
+      },
+      "verification": {
+        "verified": false,
+        "reason": "The argument 'toAddALabel' never reached a field, so the predicted creation effect was not demonstrably observed.",
+        "at": "2026-08-22T11:28:39.150Z",
+        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -499,7 +549,14 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
+      },
+      "verification": {
+        "verified": false,
+        "reason": "observed mutation but nothing confirmed a write: no success banner, and no argument echoed outside the field it was typed into",
+        "at": "2026-08-22T11:28:54.780Z",
+        "by": "deterministic diff (no OPENAI_API_KEY - model judge skipped); openai/gpt-4.1-mini disagreed but cannot overturn a rejection"
       }
     }
-  ]
+  ],
+  "verifiedAt": "2026-08-22T11:28:54.801Z"
 }
