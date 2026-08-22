@@ -97,6 +97,23 @@ function seedResolver(actions) {
   }
 }
 
+/**
+ * An inline control is one where the thing clicked and the thing filled are the
+ * same element - a contenteditable heading, a quick-add box already on the page.
+ * There is no opener to click, and clicking anything that merely shares its name
+ * ("Title" is also a nav link) navigates off the resource being edited.
+ *
+ * Recorded from what discovery already saw: the control's own name matching a
+ * field's name is exactly what "the control is the field" looks like.
+ */
+const plain = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+
+function isInline(action) {
+  const control = plain(action.control)
+  if (!control) return false
+  return action.parameters.some((p) => [p.label, p.placeholder].some((n) => n && plain(n) === control))
+}
+
 /** Say how we know this works, in the terms the evidence actually supports. */
 function describeTool(action) {
   const a = action.evidence?.announced
@@ -141,6 +158,7 @@ export function heuristicTool(action) {
     } : {
       seedUrl: action.seedUrl,
       ...(action.seed ? { seed: action.seed } : {}),
+      ...(isInline(action) ? { inline: true } : {}),
       click: action.label,
       fields: action.parameters.map((p) => ({ ...fieldRecipe(p), schemaKey: p.schemaKey })),
       submit: true,

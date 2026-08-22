@@ -50,21 +50,41 @@ export async function replay(tool, args, { headless = true, session = null } = {
         : { ok: false, effect: 'none', expected: 'relocation' }
     }
 
+    const at = page.url()
     const before = await snapshot(page)
 
-    await opener(page, tool)
-    await page.waitForTimeout(700)
+    // An inline control is the page, not a form on it: the heading you rename is
+    // the thing you clicked. There is nothing to open, and "Title" also matches a
+    // nav link - so opening one navigated off the task and renamed whatever
+    // heading the next page happened to have.
+    if (!tool.recipe.inline) {
+      await opener(page, tool)
+      await page.waitForTimeout(700)
+    }
 
-    const unfilled = []
+    const unfilled = [], filled = []
     for (const f of tool.recipe.fields) {
       const v = args[f.schemaKey]
       if (v === undefined) continue
-      if (!(await fillField(page, f, String(v)))) unfilled.push(f.schemaKey)
+      const sel = await fillField(page, f, String(v))
+      if (sel) filled.push({ selector: sel, value: String(v) })
+      else unfilled.push(f.schemaKey)
     }
 
-    if (tool.recipe.submit) {
+    // An inline control has no submit button of its own, and the page it lives on
+    // has plenty that belong to something else. discoverTask() commits a rename
+    // by blurring it and nothing else; hunting a button here clicked a stranger's
+    // and left the edit uncommitted.
+    let submitted = false
+    if (tool.recipe.submit && !tool.recipe.inline) {
       const btn = await submitButton(page)
-      if (btn) { await btn.handle.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(1200) }
+      if (btn) { await btn.handle.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(1200); submitted = true }
+    }
+    // Nothing pressed means the control commits on blur, which is how
+    // discoverTask() saved the rename this tool was compiled from.
+    if (!submitted && filled.length) {
+      await page.locator(filled[0].selector).first().press('Tab').catch(() => {})
+      await page.waitForTimeout(1200)
     }
 
     // A destructive gesture asks twice. discoverTask() answered the modal at
@@ -74,6 +94,17 @@ export async function replay(tool, args, { headless = true, session = null } = {
     if (confirm) { await confirm.handle.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(1400) }
 
     const d = diff(before, await snapshot(page))
+
+    // A rename is invisible to the differ. snapshot() names every element by its
+    // aria-label first, so <h1 contenteditable aria-label="Title"> reads
+    // h1||Title before and after however its text changed. discoverTask() hit
+    // the same blind spot at compile time and settled it the same way: reload,
+    // and ask the server whether the value came back.
+    if (!d.changed && filled.length) {
+      const kept = await survivedReload(page, at, filled)
+      if (kept) { d.changed = true; d.kind = 'mutation'; d.added = [kept, ...d.added] }
+    }
+
     // A tool that submitted without setting its arguments has not done its job,
     // however much the page changed. That is the failure mode that looks like success.
     return {
@@ -165,6 +196,27 @@ async function opener(page, tool) {
     try { await el.click({ timeout: 2500 }); return true } catch { /* next handle */ }
   }
   return false
+}
+
+/**
+ * Reload and ask whether the value is still there.
+ *
+ * Returns it in the same tag|role|text shape perceive.js records, so whatever
+ * judges this replay sees the heading carrying its new text - the thing that
+ * actually happened - rather than a claim that it did.
+ */
+async function survivedReload(page, url, filled) {
+  await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => {})
+  await page.waitForTimeout(1400)
+  for (const { selector, value } of filled) {
+    const node = await page.locator(selector).first().evaluate((el) => ({
+      tag: el.tagName.toLowerCase(),
+      role: el.getAttribute('role') || '',
+      text: (el.innerText || el.value || '').trim(),
+    })).catch(() => null)
+    if (node?.text.includes(value.trim())) return `${node.tag}|${node.role}|${node.text.slice(0, 60)}`
+  }
+  return null
 }
 
 /**

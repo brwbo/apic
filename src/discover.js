@@ -12,12 +12,18 @@
  * Every candidate passes through plan.gesture() first. A control that maps to
  * no board gesture is not recorded, which is what keeps precision at 100%.
  */
-import { snapshot, diff, describe } from './perceive.js'
+import { snapshot, diff, describe, shot, visionAvailable } from './perceive.js'
 import { fields, fill, submitButton, confirmButton } from './forms.js'
 import { rank, isDestructive, gesture, scopeOf, resourceOf } from './plan.js'
 import { affordances, links } from './explore.js'
 
 const SETTLE = 1400
+
+// Frames are only worth their cost if something can read them. With no FAL_KEY
+// the vision tier is idle, so skip the screenshots entirely rather than carry
+// ~40KB per step through the whole compile for nothing.
+const VISION = visionAvailable()
+const frame = (page) => (VISION ? shot(page) : Promise.resolve(null))
 
 /**
  * One recorded action. `label` is the canonical gesture ("delete task") because
@@ -64,6 +70,7 @@ export async function discoverInline(page, seedUrl, { onStep } = {}) {
     await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
     await page.waitForTimeout(700)
     const before = await snapshot(page)
+    const beforeFrame = await frame(page)
 
     // re-read: generated ids change per load, so the recorded chain must be fresh
     const live = (await fields(page)).find((x) => x.label === f.label || x.placeholder === f.placeholder)
@@ -76,12 +83,17 @@ export async function discoverInline(page, seedUrl, { onStep } = {}) {
     else await page.locator(live.selector).press('Enter').catch(() => {})
     await page.waitForTimeout(SETTLE)
 
-    const d = diff(before, await snapshot(page), used.value)
+    const afterSnap = await snapshot(page)
+    const d = diff(before, afterSnap, used.value)
     const control = (live.label || live.placeholder || 'submit').replace(/…$/, '').trim()
     const step = record({
       g, control, d, seedUrl,
       parameters: [{ ...live, example: used.value }],
-      extra: { inline: true, created: await createdLink(page, used.value) },
+      extra: {
+        inline: true,
+        created: await createdLink(page, used.value),
+        frames: { before: beforeFrame, after: await frame(page) },
+      },
     })
     if (d.changed) found.push(step)
     onStep?.(step, d)
@@ -113,6 +125,7 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
     await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
     await page.waitForTimeout(500)
     const before = await snapshot(page)
+    const beforeFrame = await frame(page)
 
     const opened = await open(page, label)
     if (!opened) continue
@@ -126,11 +139,13 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
       if (btn) { await btn.handle.click({ timeout: 3000 }).catch(() => {}); committed = true; await page.waitForTimeout(1200) }
     }
 
-    const d = diff(before, await snapshot(page), used[0]?.value)
+    const afterSnap = await snapshot(page)
+    const d = diff(before, afterSnap, used[0]?.value)
     const step = record({
       g, control: label, d, seedUrl,
       parameters: used.map(({ name, label: l, placeholder, type, required, value, selector, selectors }) =>
         ({ name, label: l, placeholder, type, required, example: value, selector, selectors })),
+      extra: { frames: { before: beforeFrame, after: await frame(page) } },
     })
     step.committed = committed
     if (d.changed) found.push(step)
@@ -158,12 +173,12 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
   const reload = async () => {
     await page.goto(taskUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
     await page.waitForTimeout(SETTLE)
-    return snapshot(page)
+    return { snap: await snapshot(page), frame: await frame(page) }
   }
 
   // --- rename: the title is an editable field, not a form ---------------------
   {
-    const before = await reload()
+    const { snap: before, frame: beforeFrame } = await reload()
     const title = (await fields(page)).find((f) => /^(title|name)$/i.test((f.label || f.placeholder || '').trim()))
     if (title) {
       const [used] = await fill(page, [title])
@@ -179,23 +194,30 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
         // change at all. Reloading asks the server instead: a title that comes
         // back after a fresh page load was persisted, which is stronger evidence
         // than any DOM comparison.
-        const after = await reload()
+        const { snap: after, frame: afterFrame } = await reload()
         const persisted = (await page.locator(used.selector).innerText().catch(() => '')).trim()
         const d = diff(before, after, used.value)
         if (persisted === used.value) {
           d.changed = true
           d.kind = 'mutation'
-          d.announced = { text: `reloaded and the title is still "${used.value}"`, kind: 'mutation' }
+          // `via: reload` is authoritative like a toast: the server handed the
+          // value back on a cold load. A rename is a mutation by definition, so
+          // there is nothing here for the vision tier to settle.
+          d.announced = { text: `reloaded and the title is still "${used.value}"`, kind: 'mutation', via: 'reload' }
         }
         const g = gesture('rename task', { scope })
-        push(record({ g, control: title.label || 'Title', d, seedUrl: taskUrl, parameters: [{ ...used, example: used.value }] }), d)
+        push(record({
+          g, control: title.label || 'Title', d, seedUrl: taskUrl,
+          parameters: [{ ...used, example: used.value }],
+          extra: { frames: { before: beforeFrame, after: afterFrame } },
+        }), d)
       }
     }
   }
 
   // --- move between buckets: a choice control, not a form ---------------------
   {
-    const before = await reload()
+    const { snap: before, frame: beforeFrame } = await reload()
     const moved = await chooseOther(page, /bucket|column/i)
     if (moved) {
       const d = diff(before, await snapshot(page), moved.picked)
@@ -203,6 +225,7 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
       push(record({
         g, control: moved.control, d, seedUrl: taskUrl,
         parameters: [{ name: 'bucket', label: 'Bucket', placeholder: '', type: 'string', required: true, example: moved.picked, selector: moved.selector }],
+        extra: { frames: { before: beforeFrame, after: await frame(page) } },
       }), d)
     }
   }
@@ -219,7 +242,7 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
   gestures.sort((a, b) => Number(isDestructive(a.g.label)) - Number(isDestructive(b.g.label)))
 
   for (const { label, g } of gestures) {
-    const before = await reload()
+    const { snap: before, frame: beforeFrame } = await reload()
     if (!(await open(page, label))) continue
 
     // a field may have appeared (ADD LABELS); commit it with Enter
@@ -243,7 +266,10 @@ export async function discoverTask(page, taskUrl, { onStep } = {}) {
     push(record({
       g, control: label, d, seedUrl: taskUrl,
       parameters: used ? [{ ...used, example: used.value }] : [],
-      extra: { destructive: isDestructive(g.label) || undefined },
+      extra: {
+        destructive: isDestructive(g.label) || undefined,
+        frames: { before: beforeFrame, after: await frame(page) },
+      },
     }), d)
   }
 
