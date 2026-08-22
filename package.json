@@ -14,7 +14,8 @@
     "doctor": "node src/doctor.js",
     "setup": "bash scripts/setup.sh",
     "test": "node --test \"tests/**/*.test.mjs\"",
-    "watch": "node src/watch.js"
+    "watch": "node src/watch.js",
+    "race": "node src/race.js"
   },
   "license": "MIT",
   "dependencies": {
