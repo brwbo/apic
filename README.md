@@ -34,7 +34,7 @@ a function call.
 
 | Stage | Does | Tech |
 |---|---|---|
-| **Explore** | Drives the app, ranks affordances so create actions go first, opens forms and submits them | Playwright (h integrated, [not reached](#what-doesnt-work-yet)) |
+| **Explore** | Drives the app, ranks affordances so create actions go first, opens forms and submits them | Playwright + [h](#partner-technologies) (escalation tier for controls the vocabulary can't name) |
 | **Perceive** | Decides whether anything meaningful changed | DOM diff, escalating to fal on the CLI path |
 | **Synthesise** | Turns a trajectory into a typed tool schema | deterministic — no model call |
 | **Verify** | Replays the tool cold with arguments the app has never seen | keyless judge + OpenAI |
@@ -156,11 +156,31 @@ offered, because excluding `ADD TO FAVORITES` is a scoping decision and not a
 gap for a model to fill. And a classified control still has to make the app
 confirm a write like every other candidate.
 
-*Measured:* h reads the three controls the vocabulary leaves unresolved on
-Vikunja's task page and names **none** of them — correctly; they are not
-writes. It is in the path, it is logged (`h read 3 unresolved controls, named
-0`), and on this target it has nothing to add. Without the key the compile is
-byte-identical.
+*Measured, on the compile this README reports:* h reads the three controls the
+vocabulary leaves unresolved on Vikunja's task page and names **one** of them —
+an icon-only control the regexes drop outright:
+
+```
+! h read 3 unresolved controls, named 1
+! h: "Kanban bucket: To-Do" -> move task (Pencil icon allows changing task status)
+```
+
+That is the escalation tier doing the job it exists for: a control with no
+leading verb and no usable text, recovered from its icon and mapped into the
+closed vocabulary.
+
+**It did not add a tool, and we are not claiming it did.** `move task` had
+already been found twice by then — once by the board drag (`Move card between
+columns`), once by the task page's bucket dropdown (`Kanban bucket: Doing`) —
+so h's answer deduplicated into the `moveTask` that the drag produced. On this
+target h is corroboration, not recall: a third independent route to an action
+two other routes already reached. An earlier revision of this file said h was
+never reached and named none; both were wrong.
+
+Whether h *adds* recall is untested here, because Vikunja's writes are unusually
+well-labelled. The case it is built for — an app whose buttons are icons — is
+exactly the case this target does not present. Without the key the compile
+loses that corroboration and nothing else.
 
 **fal — `google/gemini-2.5-flash-lite` via `fal-ai/any-llm/vision`.**
 The DOM differ says *whether* the page changed. It cannot settle a change the
