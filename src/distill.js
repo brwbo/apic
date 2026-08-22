@@ -33,10 +33,19 @@ export const KINDS = ['creation', 'deletion', 'mutation', 'navigation', 'cosmeti
  * `destructive` feeds the confirm tier on emitted tools, and `entities` gives
  * domain nouns for tool naming - the job the heuristic does with a regex.
  */
+/**
+ * No multi_label or top_k. Both are accepted by /inference and both silently
+ * change the response: with them the call returns 200 and `categories: []` for
+ * every input, which reads downstream as "the classifier had no opinion" and
+ * falls through to the node-count heuristic. Without them the same request
+ * returns `{state_change: {label, confidence}}`, which is what pickLabel()
+ * already parses. Pioneer was never idle for want of credit - it was answering
+ * an empty question.
+ */
 export const PERCEPTION_SCHEMA = {
   classifications: [
-    { task: 'state_change', labels: KINDS, multi_label: false, top_k: 1 },
-    { task: 'destructive', labels: ['safe', 'destructive'], multi_label: false, top_k: 1 },
+    { task: 'state_change', labels: KINDS },
+    { task: 'destructive', labels: ['safe', 'destructive'] },
   ],
   entities: ['object_type', 'field_name'],
 }
@@ -192,7 +201,11 @@ export async function distill(actions, { log } = {}) {
       inferenceId: meta.inferenceId,
     }
     action.effect = kind
-    if (risk?.label === 'destructive') { action.destructive = true; stats.destructive++ }
+    // A creation cannot destroy state, whatever the classifier says. Pioneer
+    // labelled both of Gitea's create tools destructive, which puts a required
+    // `confirm` on createIssue - a prompt is not a filter, so the cases that
+    // can be settled structurally are settled structurally.
+    if (risk?.label === 'destructive' && kind !== 'creation') { action.destructive = true; stats.destructive++ }
   })
 
   if (unparsed) {

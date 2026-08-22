@@ -37,6 +37,8 @@ function nameFor(label) {
   return camel(`${verb} ${noun}`)
 }
 
+const WRITE_KINDS = new Set(['creation', 'mutation', 'deletion', 'relocation'])
+
 const JSON_TYPE = { number: 'number', email: 'string', date: 'string', checkbox: 'boolean' }
 
 /** A generated id like task-add-textarea-ruqx7h8qv: unique per page load. */
@@ -114,9 +116,46 @@ function isInline(action) {
   return action.parameters.some((p) => [p.label, p.placeholder].some((n) => n && plain(n) === control))
 }
 
+/**
+ * The app wrote our input into the resource's own address.
+ *
+ * Gitea's create-repo shows no toast. It navigates from /repo/create to
+ * /apic/apic-probe-65746 - and that path contains the name we just typed. That
+ * is the same claim an announcement makes ("the write happened"), made by the
+ * app in a place it cannot fake: a URL it now serves. persist.js already checks
+ * for our value echoed in the body; this is the same check against the location.
+ *
+ * Deliberately narrow. A button that merely navigates proves nothing and is
+ * still rejected - the destination has to carry the submitted value.
+ */
+const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+/**
+ * Exported so verify.js judges by the same rule that synthesised the tool.
+ * They disagreed for one run: synthesis accepted createRepository on the URL
+ * and verification rejected it for "no banner, no echo" - the compiler
+ * contradicting itself is worse than either verdict alone.
+ *
+ * Gitea slugifies "apic probe 65746" to "apic-probe-65746", so both sides are
+ * compared slugged. Six characters minimum: shorter values collide with words
+ * that are already in the path.
+ */
+export function urlCarriesValue(to, values, from) {
+  if (!to || (from && to === from)) return false
+  const path = slug(pathOf(to))
+  return values.some((v) => {
+    const s = slug(v)
+    return s.length >= 6 && path.includes(s)
+  })
+}
+
+const urlEcho = (action) =>
+  urlCarriesValue(action.evidence?.to, action.parameters.map((p) => p.example), action.evidence?.from)
+
 /** Say how we know this works, in the terms the evidence actually supports. */
 function describeTool(action) {
   const a = action.evidence?.announced
+  if (!a && urlEcho(action)) return `${action.label}. Confirmed: the app served the result at ${pathOf(action.evidence.to)}, an address carrying the submitted value.`
   if (!a) return `${action.label} in the target app. Observed effect: ${action.effect}.`
   const isBanner = /success|created|saved|added|updated|deleted/i.test(a.text) && !/apic probe/i.test(a.text)
   return isBanner
@@ -162,7 +201,10 @@ export function heuristicTool(action) {
       click: action.label,
       fields: action.parameters.map((p) => ({ ...fieldRecipe(p), schemaKey: p.schemaKey })),
       submit: true,
-      expect: action.effect,
+      // fal called this navigation cosmetic on one run and a creation on the
+      // next. The URL is not a judgement call: an address carrying the value we
+      // submitted is a resource that did not exist before.
+      expect: urlEcho(action) && !WRITE_KINDS.has(action.effect) ? 'creation' : action.effect,
     },
     provenance: { evidence: action.evidence, perception: action.perception, discoveredBy: action.perception?.source === 'pioneer' ? 'pioneer/gliner2' : 'heuristic' },
   }
@@ -175,6 +217,11 @@ export function heuristicTool(action) {
  * An announcement region saying "successfully created" is the app asserting
  * that state changed, and it is the difference between a compiler and a
  * confident guesser. Recall suffers; precision is what makes this trustworthy.
+ *
+ * Two witnesses count, not one. A toast is the app saying so in the body; a
+ * destination URL carrying the value we submitted is the app saying so in the
+ * address bar. Gitea has no toast on create-repo and would otherwise compile to
+ * nothing - the confirmation was there, in a place the gate was not looking.
  */
 export function synthesize(actions, { requireConfirmation = true } = {}) {
   const seen = new Set()
@@ -187,7 +234,7 @@ export function synthesize(actions, { requireConfirmation = true } = {}) {
     // be established either way, and that is not grounds to reject.
     .filter((a) => a.persisted !== false)
     .filter((a) => !/apic probe/i.test(a.label))
-    .filter((a) => (requireConfirmation ? Boolean(a.evidence?.announced) : a.effect !== 'navigation'))
+    .filter((a) => (requireConfirmation ? Boolean(a.evidence?.announced) || urlEcho(a) : a.effect !== 'navigation'))
     .map(heuristicTool)
     .filter((t) => (seen.has(t.name) ? false : seen.add(t.name)))
 }

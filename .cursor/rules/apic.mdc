@@ -1,0 +1,5 @@
+---
+description: apic project rules (secrets, partner techs, build rules)
+alwaysApply: true
+---
+Follow every rule in @AGENTS.md. Non-negotiables: never print, log or commit API keys (repo is PUBLIC, keys live in ~/.config/apic/env via the .env symlink); never `git add -A`; keep files under 500 lines; every pipeline stage must degrade to run with no keys.

@@ -16,10 +16,29 @@ import { groundTruth, score } from './score.js'
 import { writeFileSync, mkdirSync } from 'node:fs'
 
 // Seeds are per-target: nothing about the compiler knows Vikunja's routes.
+//
+// That claim used to be half true. SEEDS was environment-driven and the three
+// constants below were not, so pointing apic at Gitea explored two pages and
+// then lost the whole descent - a repo lives at /apic/my-repo, which no amount
+// of /projects/\d+ will ever match. They are now configuration with Vikunja's
+// values as defaults, which is what the comment always claimed.
+//
+// And configuration is still the fallback, not the mechanism. When APIC_SEEDS
+// is unset, seeds.js discovers the entry points from the app's own navigation
+// and SEEDS is replaced with what it proved - hence `let`. An explicit
+// APIC_SEEDS always wins: configuration beats discovery when someone has
+// bothered to configure.
+const list = (v, d) => (v || d).split(',').map((x) => x.trim()).filter(Boolean)
 const CONFIGURED_SEEDS = process.env.APIC_SEEDS
-let SEEDS = (process.env.APIC_SEEDS || '/projects,/labels').split(',').map((x) => x.trim()).filter(Boolean)
-const PROJECT_SEED = /\/projects\/\d+/
-const TASK_SEED = /\/tasks\/\d+/
+let SEEDS = list(process.env.APIC_SEEDS, '/projects,/labels')
+// Which URL is a container worth descending into, and which is one of its items.
+const PROJECT_SEED = new RegExp(process.env.APIC_CONTAINER_SEED || '\\/projects\\/\\d+')
+const TASK_SEED = new RegExp(process.env.APIC_ITEM_SEED || '\\/tasks\\/\\d+')
+// Where to find an existing container when creation did not yield one.
+const CONTAINER_LIST = process.env.APIC_CONTAINER_LIST || '/projects'
+// Paths under the container to explore. Vikunja puts everything on the project
+// page itself; Gitea files issues under /issues/new, one level down.
+const CONTAINER_PATHS = list(process.env.APIC_CONTAINER_PATHS, ',')
 const headless = !process.argv.includes('--headed')
 
 const abs = (u) => (u.startsWith('http') ? u : `${config.target.url}${u}`)
@@ -140,7 +159,7 @@ try {
   // still exits 0. Tasks live in ANY project, not only one apic just made, so
   // fall back to a project that already exists rather than losing the branch.
   if (!project) {
-    await page.goto(`${config.target.url}/projects`, { waitUntil: 'domcontentloaded' }).catch(() => {})
+    await page.goto(`${config.target.url}${CONTAINER_LIST}`, { waitUntil: 'domcontentloaded' }).catch(() => {})
     await page.waitForTimeout(1200)
     project = (await links(page)).find((h) => PROJECT_SEED.test(h)) || null
     console.log(project
@@ -149,12 +168,21 @@ try {
   }
   let task = null
   if (project) {
-    await guard('project seed')
-    console.log(`  seed ${project} (discovered)`)
-    await settle(await discoverOn(page, abs(project), { onStep: line('\x1b[32m*\x1b[0m') }))
-    const inline = await discoverInline(page, abs(project), { onStep: line('\x1b[32m+\x1b[0m') })
-    await settle(inline)
-    task = inline.map((a) => a.created).find((u) => u && TASK_SEED.test(u))
+    // The container page, then anything the target files one level below it.
+    // '' is the container itself and is always explored; extra paths are how a
+    // target whose items live at /issues/new gets reached at all.
+    for (const sub of ['', ...CONTAINER_PATHS]) {
+      const under = sub ? `${project.replace(/\/$/, '')}${sub}` : project
+      await guard('project seed')
+      console.log(`  seed ${under} (discovered)`)
+      await settle(await discoverOn(page, abs(under), { onStep: line('\x1b[32m*\x1b[0m') }))
+      const inline = await discoverInline(page, abs(under), { onStep: line('\x1b[32m+\x1b[0m') })
+      await settle(inline)
+      // An item can be announced as a link (Vikunja) or navigated to (Gitea).
+      task = task
+        || inline.map((a) => a.created).find((u) => u && TASK_SEED.test(u))
+        || inline.map((a) => a.evidence?.to).find((u) => u && TASK_SEED.test(u))
+    }
   }
 
   // Board views hide the most legible action of all behind a drag, not a button.

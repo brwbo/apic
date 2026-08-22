@@ -5,6 +5,7 @@
 import { snapshot, diff } from './perceive.js'
 import { submitButton, confirmButton, fields as liveFields } from './forms.js'
 import { board, drag, relocated } from './kanban.js'
+import { affordances } from './explore.js'
 import { openSession, ensure, closeSession } from './session.js'
 
 /**
@@ -155,14 +156,70 @@ export async function replay(tool, args, { headless = true, session = null } = {
  * listed, otherwise take the first link of the same shape. Tools seeded on a
  * collection carry no resolver and just go where they were told.
  */
+/** Did we stay where we were sent? */
+function landedOn(page, href) {
+  const norm = (u) => new URL(u, page.url()).pathname.replace(/\/$/, '')
+  return norm(page.url()) === norm(href)
+}
+
+/**
+ * Whether a seed page actually exists, which the URL alone cannot tell you.
+ * Measured on Vikunja: a dead TASK bounces to "/", but a dead PROJECT keeps its
+ * URL - it even invents a default view id for one that never existed - and
+ * simply renders no content. The shell and its 77 sidebar links are still there
+ * either way, so the signal is whether the page offers anything to act on.
+ */
+async function alive(page, href) {
+  if (!landedOn(page, href)) return false
+  return (await affordances(page)).length > 0
+}
+
+/**
+ * A pinned collection page - seedUrl "/projects/62/249", or a seed.from that
+ * names one - is a primary key baked into the recipe. The next compile creates
+ * project 63 and the recorded one is cleaned up, so every tool seeded on it
+ * breaks at once. seed.from fixed that for rows; this fixes it for the page
+ * that LISTS the rows, which was still pinned.
+ *
+ * Resolution is UI-only. Asking Vikunja's REST API for a live project id would
+ * be one line and would defeat the claim the whole project rests on.
+ */
+async function resolveCollection(page, href, origin) {
+  const seg = new URL(href, origin).pathname.split('/').filter(Boolean)[0]
+  if (!seg) return null
+  await page.goto(new URL(`/${seg}`, origin).href, { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(800)
+  // Opening a collection row lands on its default view, which is the depth-3
+  // page a board recipe wants - so the row link is enough either way.
+  for (const row of await rowsMatching(page, new RegExp(`^/${seg}/\\d+$`), origin)) {
+    await page.goto(new URL(row, origin).href, { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(900)
+    if (await alive(page, page.url())) return page.url()
+  }
+  return null
+}
+
 async function seedTo(page, recipe) {
   const goto = (u) => page.goto(u, { waitUntil: 'domcontentloaded' })
-  if (!recipe.seed?.from) return goto(recipe.seedUrl)
-
   const { origin, pathname } = new URL(recipe.seedUrl)
+
+  if (!recipe.seed?.from) {
+    await goto(recipe.seedUrl)
+    await page.waitForTimeout(500)
+    if (await alive(page, recipe.seedUrl)) return
+    const live = await resolveCollection(page, recipe.seedUrl, origin)
+    return live ? goto(live) : undefined
+  }
+
   const shape = new RegExp(recipe.seed.pattern)
-  await goto(new URL(recipe.seed.from, origin).href)
+  let from = new URL(recipe.seed.from, origin).href
+  await goto(from)
   await page.waitForTimeout(900)
+  // The listing page itself can be gone - it is a pinned id too.
+  if (!(await alive(page, from))) {
+    const live = await resolveCollection(page, from, origin)
+    if (live) { from = live; await goto(from); await page.waitForTimeout(900) }
+  }
 
   let rows = await rowsMatching(page, shape, origin)
   // Nothing of this kind is left. That is the normal state, not an edge case:
@@ -276,17 +333,37 @@ async function survivedReload(page, url, filled) {
  * fallbacks derived from the field itself. Absorbing small UI drift here is far
  * cheaper than escalating to a re-exploration in heal.js.
  */
+/**
+ * Vikunja's quick-add renders `id="task-add-textarea-rywuedqiv"` - a stable
+ * prefix and a tail regenerated on every render. The recorded id therefore
+ * misses on the very next page load while the prefix still lands. Deriving the
+ * prefix at call time means recipes already on disk survive without a recompile.
+ */
+function idPrefix(sel) {
+  const m = /^#(.+[-_])[A-Za-z0-9]{4,}$/.exec(sel || '')
+  return m ? `[id^="${m[1].replace(/"/g, '\\"')}"]` : null
+}
+
 function locators(f) {
-  const out = [f.selector, ...(f.selectors || [])]
+  const recorded = [f.selector, ...(f.selectors || [])].filter(Boolean)
+  const out = [...recorded]
+  for (const sel of recorded) {
+    const p = idPrefix(sel)
+    if (p) out.push(p)
+  }
   if (f.name) out.push(`[name="${f.name}"]`)
   if (f.placeholder) out.push(`[placeholder="${f.placeholder}"]`)
+  if (f.label) out.push(`[aria-label="${f.label}"]`)
   return [...new Set(out.filter(Boolean))]
 }
 
 /** Fill a compiled field, trying each locator in turn. Returns the one that worked. */
 async function fillField(page, f, value) {
   for (const sel of locators(f)) {
-    try { await page.fill(sel, value, { timeout: 1500 }); return sel } catch { /* try the next */ }
+    try {
+      await page.locator(sel).first().fill(value, { timeout: 1500 })
+      return sel
+    } catch { /* try the next */ }
   }
   if (f.label) {
     try {
