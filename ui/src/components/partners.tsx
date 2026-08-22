@@ -30,8 +30,8 @@ const PARTNERS: Partner[] = [
     stage: "explore",
     role: "Looks at the buttons and forms apic could not make sense of on its own, and says which of them actually change something.",
     detail: "holo3-1-35b-a3b · OpenAI-compatible inference endpoint · one JPEG of the page per seed",
-    note: "An escalation tier, not the planner. gesture() maps a control's visible text to a <verb, resource> pair and returns null for everything else — that null is the precision gate, and it is also where recall goes: an icon-only button is dropped however plainly it writes. h is handed exactly that set, once per seed, and every answer is validated back against the same six verbs and four resources, so it can recover a control but never invent a verb. Measured on this target: 3 unresolved controls read, 1 named — a Kanban bucket control with no text, recovered from its icon.",
-    without: "Any control the built-in noun tables cannot place is dropped, and nothing looks at it a second time.",
+    note: "apic first tries to read every control from its label alone — \"New project\" is obviously a create. Anything with no usable label, like an icon-only button, is what h gets: a screenshot of the page and the list of leftovers, once per page. Its answers are checked against the same short list of verbs and nouns apic already uses, so it can rescue a button but never make up a new kind of action. On Vikunja it was shown 3 leftovers and correctly named 1 — an icon-only Kanban column control.",
+    without: "Any button apic cannot read from its label is simply skipped.",
   },
   {
     name: "fal",
@@ -39,8 +39,8 @@ const PARTNERS: Partner[] = [
     stage: "perceive",
     role: "Compares before-and-after screenshots and says whether something actually happened, or the page just redrew itself.",
     detail: "fal-ai/any-llm/vision · gemini-2.5-flash-lite · 1440×900 frame inline as a data URI",
-    note: "It is an escalation tier, not a default. Steps the app already confirmed with its own success banner never reach it, so the VLM is spent only on the cases DOM text genuinely cannot settle. It runs on the CLI compile; a compile driven through compile_app on the MCP server stays on the text tier.",
-    without: "The text classification stands, and a re-render can pass as a write.",
+    note: "Only called when the text on the page cannot settle it. If the app showed a \"Project created\" banner, that is the answer and no screenshot is sent. The pictures are spent on the ambiguous cases — a card that moved column, a row that reordered — where nothing was announced.",
+    without: "apic goes on what the page text says, and a page that merely redrew can be mistaken for one that changed.",
   },
   {
     name: "OpenAI",
@@ -48,8 +48,8 @@ const PARTNERS: Partner[] = [
     src: "/logos/openai_dark.svg",
     role: "Reads the documentation Tavily found and pulls out the words the app uses for its things — issue, repository, task — so the tools get sensible names. Also the backup judge, behind Pioneer, for whether a replayed tool really worked.",
     detail: "gpt-4.1-mini · strict JSON schema, structured output",
-    note: "Not synthesise — that stage takes verb and noun off the label and JSON Schema off the fields, with no model in it at all. In verify OpenAI sits on top of the keyless diff judge and may tighten a verdict but never loosen one. It has been caught citing a filter box's own echo as independent evidence — a judge looser than the free check is worse than no judge.",
-    without: "The built-in noun table stands; if the Pioneer judge is also absent, deterministic diff judging alone.",
+    note: "It does not write the tools — that part is plain code, no model involved. As a judge it is allowed to say \"no\" to a tool the basic check passed, but never \"yes\" to one it failed. That rule exists because it was once caught calling a search box redisplaying what was typed into it proof that something was saved.",
+    without: "Tools keep the names apic already knows, and the basic page-diff check is the only judge.",
   },
   {
     name: "Tavily",
@@ -57,7 +57,7 @@ const PARTNERS: Partner[] = [
     stage: "ground",
     role: "Goes and finds the app's own documentation on the web. apic was written knowing Vikunja's words — task, project, label. Point it at Gitea and Tavily is how it learns that this app has issues, repositories and pull requests instead.",
     detail: "api.tavily.com/search · prose to a closed noun set, capped at 12, cached per host",
-    note: "The built-in tables are Vikunja's words — bucket, task, label, project. Point apic at Gitea and issue, repository and pull request are terms it has never heard of. Grounding only ever adds vocabulary; it cannot remove what is already there.",
+    note: "Tavily searches the web for the app's docs and returns the pages; OpenAI then reads them and picks out up to twelve nouns. New words are added to what apic knows, never swapped in for it, and the result is saved per app so a second compile costs nothing.",
     without: "apic only knows the words it was born with. Anything an app calls something else gets a worse name, or gets dropped.",
   },
   {
@@ -66,8 +66,8 @@ const PARTNERS: Partner[] = [
     stage: "verify · distill",
     role: "A small model we trained on apic's own results. After a tool is replayed, it reads what changed on the page and decides whether the action really worked — faster than GPT-4.1-mini, and with no wrong \"yes\" answers on tools it had never seen.",
     detail: "fastino/gliner2-base-v1 · LoRA, 788 rows, trains in ~4 min · held-out bench: 94.4% accuracy, 100% precision, 150 ms/row — against 89.3%, 84.3%, 890 ms for gpt-4.1-mini",
-    note: "No hand labels. Every compiled tool is replayed six times and the shipped judge's verdict is recorded; negatives are made by deleting the evidence the deterministic floor keys on, and relabelled by that floor. The bench holds out whole tools, so the number is generalisation, not memory. The encoder trades some recall for zero false positives — the right side for a judge that may uphold a rejection but never promote a guess. In distill the same base model classifies what kind of change a step was.",
-    without: "The OpenAI judge, then the keyless diff floor. Verify never stops working; it gets slower and looser.",
+    note: "Nobody labelled anything by hand. apic replayed each of its own tools six times and wrote down what the page did and what its existing judge decided. From those we made harder examples — the same page with the success message deleted, or the typed value only showing in the box it was typed into — and trained on the lot. The test set holds back two whole tools the model never saw, so the score is about new tools, not remembered ones. It says \"yes\" a little less often than GPT, and was never wrong when it did.",
+    without: "OpenAI judges instead — slower, and more willing to pass a tool that did not really work. With no keys at all, the basic page-diff check still runs.",
   },
 ];
 
@@ -130,9 +130,9 @@ export function Partners() {
         </ul>
 
         <p className="mt-12 max-w-2xl border-t border-white/10 pt-8 text-[14px] leading-relaxed text-white/45">
-          Strip all five keys and apic still compiles: the Playwright driver and the DOM differ run
-          with nothing configured at all. What the keys buy is the difference between a guess and a
-          measurement at every stage.
+          Remove all five keys and apic still compiles — the browser driver and the page-diff check
+          need nothing configured. What the keys buy is the difference between a guess and a
+          measurement at each step.
         </p>
       </div>
     </section>
