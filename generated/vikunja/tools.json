@@ -49,8 +49,8 @@
             "NEW PROJECT"
           ],
           "added": [
-            "li||apic probe 85217\nMark this project as favorite\nOpen project ",
-            "a||apic probe 85217",
+            "li||apic probe 87958\nMark this project as favorite\nOpen project ",
+            "a||apic probe 87958",
             "a||List"
           ],
           "removed": [
@@ -59,7 +59,7 @@
             "a||NEW PROJECT"
           ],
           "from": "/projects",
-          "to": "/projects/68/273",
+          "to": "/projects/84/337",
           "announced": {
             "text": "Success The project was successfully created.",
             "kind": "creation",
@@ -74,13 +74,7 @@
         },
         "discoveredBy": "heuristic"
       },
-      "healedAt": "2026-08-22T12:17:11.112Z",
-      "verification": {
-        "verified": true,
-        "reason": "The app confirmed success with a status message and the new project title appeared in the added DOM nodes, confirming creation.",
-        "at": "2026-08-22T12:17:25.132Z",
-        "by": "openai/gpt-4.1-mini"
-      }
+      "healedAt": "2026-08-22T12:39:31.951Z"
     },
     {
       "name": "createLabel",
@@ -118,7 +112,7 @@
             "NEW LABEL"
           ],
           "added": [
-            "a||apic probe 94489",
+            "a||apic probe 97500",
             "div|status|Success\nThe label was successfully created."
           ],
           "removed": [],
@@ -138,12 +132,7 @@
         },
         "discoveredBy": "heuristic"
       },
-      "verification": {
-        "verified": true,
-        "reason": "The app displayed a success status message confirming the label was successfully created, and the new label node appeared in the DOM.",
-        "at": "2026-08-22T12:17:31.549Z",
-        "by": "openai/gpt-4.1-mini"
-      }
+      "healedAt": "2026-08-22T12:40:08.741Z"
     },
     {
       "name": "updateLabel",
@@ -155,6 +144,10 @@
           "v3": {
             "type": "string",
             "description": "Title"
+          },
+          "description": {
+            "type": "string",
+            "description": "Description"
           }
         },
         "required": []
@@ -169,6 +162,12 @@
             "placeholder": "The label title goes here…",
             "label": "Title",
             "schemaKey": "v3"
+          },
+          {
+            "selector": "div[aria-label=\"Description\"]",
+            "placeholder": "Description",
+            "label": "Description",
+            "schemaKey": "description"
           }
         ],
         "submit": true,
@@ -181,12 +180,12 @@
             "Edit Label"
           ],
           "added": [
-            "a||apic probe 375",
+            "a||apic probe 3425",
             "button||Close",
             "input||The label title goes here…"
           ],
           "removed": [
-            "a||apic probe 49395"
+            "a||apic probe 55691"
           ],
           "from": "/labels",
           "to": "/labels",
@@ -204,12 +203,7 @@
         },
         "discoveredBy": "heuristic"
       },
-      "verification": {
-        "verified": true,
-        "reason": "The app confirmed success with the message 'Success The label was successfully updated.' and the old label node was removed while the new label node appeared, indicating the label was updated.",
-        "at": "2026-08-22T12:17:41.264Z",
-        "by": "openai/gpt-4.1-mini"
-      }
+      "healedAt": "2026-08-22T12:40:45.530Z"
     },
     {
       "name": "createTask",
@@ -226,12 +220,12 @@
         "required": []
       },
       "recipe": {
-        "seedUrl": "http://localhost:3456/projects/68/273",
+        "seedUrl": "http://localhost:3456/projects/84/337",
         "inline": true,
         "click": "create task",
         "fields": [
           {
-            "selector": "#task-add-textarea-yte1dtym7",
+            "selector": "#task-add-textarea-jzk12tzp1",
             "placeholder": "Add a task…",
             "label": "Add a task…",
             "schemaKey": "task"
@@ -247,33 +241,28 @@
             "Add a task"
           ],
           "added": [
-            "input||Mark 'apic probe 32491' as done",
-            "a||apic probe 32491"
+            "input||Mark 'apic probe 22960' as done",
+            "a||apic probe 22960"
           ],
           "removed": [],
-          "from": "/projects/68/273",
-          "to": "/projects/68/273",
+          "from": "/projects/84/337",
+          "to": "/projects/84/337",
           "announced": {
-            "text": "apic probe 32491",
+            "text": "apic probe 22960",
             "kind": "creation",
             "via": "echo"
-          }
+          },
+          "controlStable": true
         },
         "perception": {
           "kind": "creation",
           "confidence": null,
           "source": "fal",
           "meaningful": true,
-          "reason": "A new task was added to the list.",
+          "reason": "A new task with the id '22960' was added to the list.",
           "escalate": false
         },
         "discoveredBy": "heuristic"
-      },
-      "verification": {
-        "verified": true,
-        "reason": "The submitted task 'apic task vmt4cff6q-3' appeared in the app's DOM as a new node, confirming creation.",
-        "at": "2026-08-22T12:17:48.607Z",
-        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -298,7 +287,7 @@
         ]
       },
       "recipe": {
-        "seedUrl": "http://localhost:3456/projects/68/276",
+        "seedUrl": "http://localhost:3456/projects/84/340",
         "drag": {
           "columnSelector": ".bucket",
           "cardSelector": ".task, [class*=\"card\"]"
@@ -308,13 +297,13 @@
       "provenance": {
         "evidence": {
           "announced": {
-            "text": "\"#2 apic probe 32491\" moved from To-Do to Doing",
+            "text": "\"#2 apic probe 22960\" moved from To-Do to Doing",
             "kind": "relocation"
           },
           "added": [],
           "removed": [],
-          "from": "http://localhost:3456/projects/68/276",
-          "to": "http://localhost:3456/projects/68/276",
+          "from": "http://localhost:3456/projects/84/340",
+          "to": "http://localhost:3456/projects/84/340",
           "control": "Move card between columns",
           "controls": [
             "Move card between columns"
@@ -325,16 +314,10 @@
           "confidence": null,
           "source": "fal",
           "meaningful": true,
-          "reason": "Task moved from To-Do to Doing, changing its status.",
+          "reason": "Task moved from 'To-Do' column to 'Doing' column.",
           "escalate": false
         },
         "discoveredBy": "heuristic"
-      },
-      "verification": {
-        "verified": true,
-        "reason": "The observed effect was relocation with no removed DOM nodes, and the control 'Move card between columns' was clicked, confirming the predicted relocation occurred.",
-        "at": "2026-08-22T12:17:57.324Z",
-        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -352,15 +335,15 @@
         "required": []
       },
       "recipe": {
-        "seedUrl": "http://localhost:3456/tasks/160",
+        "seedUrl": "http://localhost:3456/tasks/179",
         "seed": {
-          "from": "/projects/68/273",
+          "from": "/projects/84/337",
           "pattern": "^/tasks/\\d+$",
           "create": {
             "click": "Add a task",
             "fields": [
               {
-                "selector": "#task-add-textarea-yte1dtym7",
+                "selector": "#task-add-textarea-jzk12tzp1",
                 "placeholder": "Add a task…",
                 "label": "Add a task…"
               }
@@ -388,10 +371,10 @@
           ],
           "added": [],
           "removed": [],
-          "from": "/tasks/160",
-          "to": "/tasks/160",
+          "from": "/tasks/179",
+          "to": "/tasks/179",
           "announced": {
-            "text": "reloaded and the title is still \"apic probe 45912\"",
+            "text": "reloaded and the title is still \"apic probe 36958\"",
             "kind": "mutation",
             "via": "reload"
           }
@@ -402,12 +385,6 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
-      },
-      "verification": {
-        "verified": true,
-        "reason": "The submitted value 'apic title vmt4cff6q-5' appeared in an h1 node after the action, confirming the update.",
-        "at": "2026-08-22T12:18:05.075Z",
-        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -420,15 +397,15 @@
         "required": []
       },
       "recipe": {
-        "seedUrl": "http://localhost:3456/tasks/160",
+        "seedUrl": "http://localhost:3456/tasks/179",
         "seed": {
-          "from": "/projects/68/273",
+          "from": "/projects/84/337",
           "pattern": "^/tasks/\\d+$",
           "create": {
             "click": "Add a task",
             "fields": [
               {
-                "selector": "#task-add-textarea-yte1dtym7",
+                "selector": "#task-add-textarea-jzk12tzp1",
                 "placeholder": "Add a task…",
                 "label": "Add a task…"
               }
@@ -454,8 +431,8 @@
           "removed": [
             "button||MARK TASK DONE!"
           ],
-          "from": "/tasks/160",
-          "to": "/tasks/160",
+          "from": "/tasks/179",
+          "to": "/tasks/179",
           "announced": {
             "text": "Success The task was saved successfully. UNDO",
             "kind": "mutation",
@@ -468,12 +445,6 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
-      },
-      "verification": {
-        "verified": true,
-        "reason": "The app confirmed success with a status message and the 'MARK TASK DONE!' button was replaced by 'MARK AS UNDONE', indicating the task state was toggled.",
-        "at": "2026-08-22T12:18:15.117Z",
-        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -491,15 +462,15 @@
         "required": []
       },
       "recipe": {
-        "seedUrl": "http://localhost:3456/tasks/160",
+        "seedUrl": "http://localhost:3456/tasks/179",
         "seed": {
-          "from": "/projects/68/273",
+          "from": "/projects/84/337",
           "pattern": "^/tasks/\\d+$",
           "create": {
             "click": "Add a task",
             "fields": [
               {
-                "selector": "#task-add-textarea-yte1dtym7",
+                "selector": "#task-add-textarea-jzk12tzp1",
                 "placeholder": "Add a task…",
                 "label": "Add a task…"
               }
@@ -525,13 +496,13 @@
             "ADD LABELS"
           ],
           "added": [
-            "button||Remove label apic probe 65731",
+            "button||Remove label apic probe 56629",
             "input|combobox|Type to add a label…",
             "div|status|Success\nThe label has been created and added successfully."
           ],
           "removed": [],
-          "from": "/tasks/160",
-          "to": "/tasks/160",
+          "from": "/tasks/179",
+          "to": "/tasks/179",
           "announced": {
             "text": "Success The label has been created and added successfully.",
             "kind": "creation",
@@ -544,12 +515,6 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
-      },
-      "verification": {
-        "verified": true,
-        "reason": "The app confirmed success with the message 'Success The label has been created and added successfully.' and new label option nodes appeared, indicating the label creation.",
-        "at": "2026-08-22T12:18:25.184Z",
-        "by": "openai/gpt-4.1-mini"
       }
     },
     {
@@ -569,15 +534,15 @@
         ]
       },
       "recipe": {
-        "seedUrl": "http://localhost:3456/tasks/160",
+        "seedUrl": "http://localhost:3456/tasks/179",
         "seed": {
-          "from": "/projects/68/273",
+          "from": "/projects/84/337",
           "pattern": "^/tasks/\\d+$",
           "create": {
             "click": "Add a task",
             "fields": [
               {
-                "selector": "#task-add-textarea-yte1dtym7",
+                "selector": "#task-add-textarea-jzk12tzp1",
                 "placeholder": "Add a task…",
                 "label": "Add a task…"
               }
@@ -605,8 +570,8 @@
             "button||#2",
             "h1||Title"
           ],
-          "from": "/tasks/160",
-          "to": "/projects/68/276",
+          "from": "/tasks/179",
+          "to": "/projects/84/340",
           "announced": {
             "text": "Success The task has been deleted successfully.",
             "kind": "deletion",
@@ -619,15 +584,7 @@
           "source": "heuristic"
         },
         "discoveredBy": "heuristic"
-      },
-      "verification": {
-        "verified": true,
-        "reason": "The app confirmed success with a status message and the task's related nodes were removed from the DOM, indicating deletion.",
-        "at": "2026-08-22T12:18:36.704Z",
-        "by": "openai/gpt-4.1-mini"
       }
     }
-  ],
-  "rejected": [],
-  "verifiedAt": "2026-08-22T12:18:36.739Z"
+  ]
 }

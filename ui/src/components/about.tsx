@@ -36,8 +36,8 @@ export function About() {
                 as an AI engineer at 4C, an IT consultancy.
               </p>
               <p>
-                Next year I&rsquo;m hoping to found a company &mdash; and if not that, a job, then a
-                degree apprenticeship, then AI at university.
+                After my A&nbsp;levels I&rsquo;m hoping to found a company, or jump straight into a
+                software dev or AI job.
               </p>
             </div>
 

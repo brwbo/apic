@@ -2,5 +2,142 @@
   "app": "gitea",
   "target": "http://localhost:3001",
   "generatedBy": "apic",
-  "tools": []
+  "tools": [
+    {
+      "name": "createRepository",
+      "description": "create repository. Confirmed: the app served the result at /apic/apic-probe-86634, an address carrying the submitted value.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "repoName": {
+            "type": "string",
+            "description": "Repository Name"
+          }
+        },
+        "required": [
+          "repoName"
+        ]
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:3001/repo/create",
+        "inline": true,
+        "click": "create repository",
+        "fields": [
+          {
+            "selector": "[name=\"repo_name\"]",
+            "name": "repo_name",
+            "label": "Repository Name",
+            "schemaKey": "repoName"
+          }
+        ],
+        "submit": true,
+        "expect": "creation"
+      },
+      "provenance": {
+        "evidence": {
+          "control": "Repository Name",
+          "controls": [
+            "Repository Name"
+          ],
+          "added": [
+            "div|main|apic/apic-probe-86634",
+            "a||apic",
+            "a||apic-probe-86634"
+          ],
+          "removed": [
+            "div|main|New Repository",
+            "h3||New Repository",
+            "a||Migrate repository."
+          ],
+          "from": "/repo/create",
+          "to": "/apic/apic-probe-86634",
+          "announced": null,
+          "controlStable": true
+        },
+        "perception": {
+          "kind": "creation",
+          "confidence": 0.827139675617218,
+          "source": "fal",
+          "heuristicKind": "navigation",
+          "escalate": false,
+          "entities": [],
+          "inferenceId": "dd8ea386-a8e3-4aa4-a3fe-3a3f1a264077",
+          "meaningful": true,
+          "reason": "The page shows a form to create a new repository."
+        },
+        "discoveredBy": "heuristic"
+      }
+    },
+    {
+      "name": "createIssue",
+      "description": "create issue. Confirmed: the submitted value appeared in the app after the action.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Title"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:3001/apic/apic-probe-86634/issues/new",
+        "inline": true,
+        "click": "create issue",
+        "fields": [
+          {
+            "selector": "[name=\"title\"]",
+            "name": "title",
+            "placeholder": "Title",
+            "schemaKey": "title"
+          }
+        ],
+        "submit": true,
+        "expect": "creation"
+      },
+      "provenance": {
+        "evidence": {
+          "control": "Title",
+          "controls": [
+            "Title"
+          ],
+          "added": [
+            "div|main|#1 - apic probe 57093",
+            "overflow-menu|navigation|Code\nIssues\n1\nPackages\nProjects\nWiki\nSettings",
+            "a||Issues\n1"
+          ],
+          "removed": [
+            "div|main|New Issue",
+            "overflow-menu|navigation|Code\nIssues\nPackages\nProjects\nWiki\nSettings",
+            "input||Title"
+          ],
+          "from": "/apic/apic-probe-86634/issues/new",
+          "to": "/apic/apic-probe-86634/issues/1",
+          "announced": {
+            "text": "#1 - apic probe 57093",
+            "kind": "creation",
+            "via": "echo"
+          },
+          "controlStable": true
+        },
+        "perception": {
+          "kind": "creation",
+          "confidence": null,
+          "source": "fal",
+          "heuristicKind": "creation",
+          "escalate": false,
+          "entities": [],
+          "inferenceId": "dd8ea386-a8e3-4aa4-a3fe-3a3f1a264077",
+          "meaningful": true,
+          "reason": "An issue was created by filling out the form and clicking the button."
+        },
+        "discoveredBy": "heuristic"
+      }
+    }
+  ]
 }

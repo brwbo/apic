@@ -201,7 +201,11 @@ export async function distill(actions, { log } = {}) {
       inferenceId: meta.inferenceId,
     }
     action.effect = kind
-    if (risk?.label === 'destructive') { action.destructive = true; stats.destructive++ }
+    // A creation cannot destroy state, whatever the classifier says. Pioneer
+    // labelled both of Gitea's create tools destructive, which puts a required
+    // `confirm` on createIssue - a prompt is not a filter, so the cases that
+    // can be settled structurally are settled structurally.
+    if (risk?.label === 'destructive' && kind !== 'creation') { action.destructive = true; stats.destructive++ }
   })
 
   if (unparsed) {

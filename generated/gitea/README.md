@@ -8,7 +8,99 @@ emitted as an MCP server. The app's own API was never read.
 
 ## Tools
 
+### `createRepository`
 
+create repository. Confirmed: the app served the result at /apic/apic-probe-86634, an address carrying the submitted value.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "repoName": {
+      "type": "string",
+      "description": "Repository Name"
+    }
+  },
+  "required": [
+    "repoName"
+  ]
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "control": "Repository Name",
+  "controls": [
+    "Repository Name"
+  ],
+  "added": [
+    "div|main|apic/apic-probe-86634",
+    "a||apic",
+    "a||apic-probe-86634"
+  ],
+  "removed": [
+    "div|main|New Repository",
+    "h3||New Repository",
+    "a||Migrate repository."
+  ],
+  "from": "/repo/create",
+  "to": "/apic/apic-probe-86634",
+  "announced": null,
+  "controlStable": true
+}
+```
+</details>
+
+### `createIssue`
+
+create issue. Confirmed: the submitted value appeared in the app after the action.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title"
+    }
+  },
+  "required": [
+    "title"
+  ]
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "control": "Title",
+  "controls": [
+    "Title"
+  ],
+  "added": [
+    "div|main|#1 - apic probe 57093",
+    "overflow-menu|navigation|Code\nIssues\n1\nPackages\nProjects\nWiki\nSettings",
+    "a||Issues\n1"
+  ],
+  "removed": [
+    "div|main|New Issue",
+    "overflow-menu|navigation|Code\nIssues\nPackages\nProjects\nWiki\nSettings",
+    "input||Title"
+  ],
+  "from": "/apic/apic-probe-86634/issues/new",
+  "to": "/apic/apic-probe-86634/issues/1",
+  "announced": {
+    "text": "#1 - apic probe 57093",
+    "kind": "creation",
+    "via": "echo"
+  },
+  "controlStable": true
+}
+```
+</details>
 
 ## Run
 

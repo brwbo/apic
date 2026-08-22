@@ -13,8 +13,10 @@ import { join } from 'node:path'
 import OpenAI from 'openai'
 import { config } from './config.js'
 import { replay } from './replay.js'
+import { urlCarriesValue } from './synthesize.js'
 import { emit } from './emit.js'
 import { openSession, ensure, closeSession } from './session.js'
+import { judgePioneer, judgeAvailable as pioneerJudge, judgeModelId } from './judge-pioneer.js'
 
 // replay.js allows 500ms to settle, which fails once the target accumulates rows.
 const PACE_MS = Number(process.env.APIC_VERIFY_PACE_MS || 2500)
@@ -51,10 +53,14 @@ text is the field showing its own value, not a write); or disappearance - the ON
 or toggle can offer, since a delete removes the row and a toggle swaps its control for the inverse,
 so controlThisToolClicked inside removedDomNodes confirms the state flipped. verified:false if
 nothing changed, if an argument never reached a field, or if the only evidence is nodes appearing.
-A page that changed is not a write. Prefer false when the evidence is ambiguous.`
+Also verified:true when the app SERVED the result at a new address containing the submitted value -
+landedAtUrl differs from startedAtUrl and carries the argument, allowing for slugging ("apic probe 7"
+-> "apic-probe-7"). That is the app asserting the resource exists, in the URL instead of a banner,
+and some apps confirm a creation no other way. A mere navigation that does NOT carry the value
+proves nothing. A page that changed is not a write. Prefer false when the evidence is ambiguous.`
 
 /** OpenAI judge. Reads the diff and rules on it. */
-async function judgeModel(tool, args, result) {
+export async function judgeModel(tool, args, result) {
   const client = new OpenAI({ apiKey: config.keys.openai, timeout: 30000 })
   const res = await client.chat.completions.create({
     model: MODEL,
@@ -72,6 +78,8 @@ async function judgeModel(tool, args, result) {
           removedDomNodes: result.removed || [],
           controlThisToolClicked: tool.provenance?.evidence?.control || tool.recipe.click || null,
           argumentsThatNeverReachedAField: result.unfilled || [],
+          startedAtUrl: tool.recipe?.seedUrl || null,
+          landedAtUrl: result.landedAt || null,
           replayError: result.error,
         },
       }) },
@@ -88,7 +96,7 @@ async function judgeModel(tool, args, result) {
 const SUCCESS = /\b(success|successfully|created|saved|added|updated|deleted|removed)\b/i
 const SELF = /^(input|textarea|select)\||\|(textbox|search|searchbox|combobox)\|/ // the field showing its own value
 
-function judgeDiff(tool, args, result) {
+export function judgeDiff(tool, args, result) {
   const by = 'deterministic diff (no OPENAI_API_KEY - model judge skipped)'
   const added = result.added || []
   if (result.error) return { verified: false, reason: `replay threw: ${result.error}`, by }
@@ -112,6 +120,11 @@ function judgeDiff(tool, args, result) {
   const echo = added.find((a) => !SELF.test(a) && strings.some((v) => a.includes(v)))
   const note = result.effect === result.expected ? '' : ` (replay called it ${result.effect}; it drops the value from diff())`
   if (echo) return { verified: true, reason: `the submitted value came back on the page${note}`, by }
+  // The app can echo in the address bar instead of the body. Gitea's create-repo
+  // shows no banner and renders no copy of the name - it serves the result at
+  // /apic/<name>, which is the same assertion made somewhere else.
+  if (urlCarriesValue(result.landedAt, strings, tool.recipe?.seedUrl))
+    return { verified: true, reason: `the app served the result at ${result.landedAt.replace(/^https?:\/\/[^/]+/, '')}, an address carrying the submitted value`, by }
   // A toggle swaps its own control for the inverse. Argument-less tools at the
   // predicted effect only: a tool that navigates also loses its control.
   const control = tool.provenance?.evidence?.control || tool.recipe?.click
@@ -137,21 +150,33 @@ export async function verifyAll(tools, { headless = true, log = () => {} } = {})
       let result
       try { result = await replay(tool, args, { session }) }
       catch (e) { result = { ok: false, error: e.message?.split('\n')[0] || String(e) } }
+      // Where the replay ended up. replay() reports the DOM diff and not the
+      // location, and for a tool whose only witness is the URL that is the
+      // whole of the evidence.
+      result.landedAt = session.page.url()
       // An argument landing on one attempt but not the next is an unreliable
       // editor, not a drifted selector - Vikunja's rich-text description refuses
       // roughly one fill in three. Real drift fails both times, so retry once.
       if (result.unfilled?.length) {
         const retry = exampleArgs(tool, `${token}-${i}r`)
         try { const again = await replay(tool, retry, { session })
-          if (!again.unfilled?.length) { result = again; args = retry } } catch { /* keep the first */ }
+          if (!again.unfilled?.length) { again.landedAt = session.page.url(); result = again; args = retry } } catch { /* keep the first */ }
       }
       // The diff is the floor: the model may overturn a pass, never a rejection.
       const floor = judgeDiff(tool, args, result)
       let verdict = floor
-      if (keyed) {
-        try { const m = await judgeModel(tool, args, result)
+      // Judge order: the fine-tuned encoder when one is deployed (one forward
+      // pass, no prompt), else the general-purpose LLM, else the floor alone.
+      if (pioneerJudge() || keyed) {
+        try { const m = pioneerJudge() ? await judgePioneer(tool, args, result) : await judgeModel(tool, args, result)
           verdict = m.verified && !floor.verified ? { ...floor, by: `${floor.by}; ${m.by} disagreed but cannot overturn a rejection` } : m }
-        catch (e) { verdict = { ...floor, by: `fell back to diff: ${e.message?.split('\n')[0] || e}` } }
+        catch (e) {
+          if (pioneerJudge() && keyed) {
+            try { const m = await judgeModel(tool, args, result)
+              verdict = m.verified && !floor.verified ? { ...floor, by: `${floor.by}; ${m.by} disagreed but cannot overturn a rejection` } : { ...m, by: `${m.by} (pioneer judge failed: ${e.message?.split('\n')[0] || e})` } }
+            catch (e2) { verdict = { ...floor, by: `fell back to diff: ${e2.message?.split('\n')[0] || e2}` } }
+          } else verdict = { ...floor, by: `fell back to diff: ${e.message?.split('\n')[0] || e}` }
+        }
       }
       const verification = { verified: verdict.verified, reason: verdict.reason, at: new Date().toISOString(), by: verdict.by }
       out.push({ ...tool, verification })
@@ -179,7 +204,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   // Re-judge the rejects: a fix is meant to revive them.
   const pending = [...bundle.tools, ...(bundle.rejected || [])]
   const keyed = Boolean(config.keys.openai)
-  console.log(`\n  apic verify -> ${bundle.target}\n  judge: ${keyed ? `diff floor + openai ${MODEL} (structured output)` : '\x1b[33mdeterministic diff only - no OPENAI_API_KEY, degrading\x1b[0m'}`)
+  const judge = pioneerJudge() ? `diff floor + pioneer fine-tuned encoder ${judgeModelId()}${keyed ? ` (openai ${MODEL} on standby)` : ''}`
+    : keyed ? `diff floor + openai ${MODEL} (structured output)` : '\x1b[33mdeterministic diff only - no OPENAI_API_KEY, degrading\x1b[0m'
+  console.log(`\n  apic verify -> ${bundle.target}\n  judge: ${judge}`)
   console.log(`  ${pending.length} tools to replay with fresh arguments\n`)
 
   const rows = []

@@ -12,7 +12,7 @@ import { SectionLabel } from "@/components/section-label";
 type Partner = {
   name: string;
   stage: string;
-  src?: string;
+  src: string;
   /** What it decides. One sentence, in terms of the pipeline. */
   role: string;
   /** The concrete call, so the claim is falsifiable. */
@@ -26,6 +26,7 @@ type Partner = {
 const PARTNERS: Partner[] = [
   {
     name: "h",
+    src: "/logos/h.svg",
     stage: "explore",
     role: "Chooses the next action to try from the affordances on the page.",
     detail: "holo3-1-35b-a3b · OpenAI-compatible inference endpoint",
@@ -34,6 +35,7 @@ const PARTNERS: Partner[] = [
   },
   {
     name: "fal",
+    src: "/logos/fal.svg",
     stage: "perceive",
     role: "Settles whether a change was a real write or a cosmetic re-render.",
     detail: "fal-ai/any-llm/vision · gemini-2.5-flash-lite · 1440×900 frame inline as a data URI",
@@ -51,6 +53,7 @@ const PARTNERS: Partner[] = [
   },
   {
     name: "Tavily",
+    src: "/logos/tavily.svg",
     stage: "ground",
     role: "Reads the target app's own documentation so the compiler learns that app's nouns.",
     detail: "api.tavily.com/search · prose to a closed noun set, capped at 12, cached per host",
@@ -59,6 +62,7 @@ const PARTNERS: Partner[] = [
   },
   {
     name: "Pioneer",
+    src: "/logos/pioneer.svg",
     stage: "distill",
     role: "Classifies what kind of change happened, replacing the softest inference in the compiler.",
     detail: "GLiNER2, a ~300M encoder · one forward pass for classification and NER · $0.15/M tokens",
@@ -67,22 +71,18 @@ const PARTNERS: Partner[] = [
   },
 ];
 
+/**
+ * Sized by height with the width left to the artwork, because these are not all
+ * square: h's mark is a circle beside an H at 30x18, while fal, Tavily and
+ * Pioneer are square glyphs. Forcing a box would squash one to fit the others.
+ *
+ * Each file is the vendor's own mark with its fill set to #fff, matching the
+ * openai_dark.svg already in public/logos. They ship near-black (#040405 for h,
+ * #1F1E1E for Tavily) which is invisible on this background, and currentColor
+ * is no use because an SVG loaded through <img> cannot inherit the page's colour.
+ */
 function Mark({ p }: { p: Partner }) {
-  if (p.src) {
-    return (
-      <img src={p.src} alt="" width={22} height={22} className="h-[22px] w-[22px] shrink-0 opacity-90" aria-hidden />
-    );
-  }
-  // Matches stack.tsx: no open logo exists for these, and a set lettermark
-  // beats an invented one.
-  return (
-    <span
-      className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[6px] border border-white/20 font-mono text-[11px] text-white/55"
-      aria-hidden
-    >
-      {p.name[0].toLowerCase()}
-    </span>
-  );
+  return <img src={p.src} alt="" className="h-[22px] w-auto shrink-0 opacity-90" aria-hidden />;
 }
 
 export function Partners() {
