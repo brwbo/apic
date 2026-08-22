@@ -39,6 +39,9 @@ function nameFor(label) {
 
 const JSON_TYPE = { number: 'number', email: 'string', date: 'string', checkbox: 'boolean' }
 
+/** A generated id like task-add-textarea-ruqx7h8qv: unique per page load. */
+const AUTO = /[-_][a-z0-9]{7,}$/i
+
 /** Say how we know this works, in the terms the evidence actually supports. */
 function describeTool(action) {
   const a = action.evidence?.announced
@@ -52,9 +55,7 @@ function describeTool(action) {
 export function heuristicTool(action) {
   const properties = {}, required = []
   for (const p of action.parameters) {
-    // A generated id like task-add-textarea-ruqx7h8qv is not a parameter name.
     // Prefer what a human reads: the label, then the placeholder.
-    const AUTO = /[-_][a-z0-9]{7,}$/i
     const raw = p.name && !AUTO.test(p.name) ? p.name : (p.label || p.placeholder || p.name || 'value')
     const key = camel(raw.replace(/^(add|enter|type)\s+(a|an|the)?\s*/i, '').replace(/…|\.\.\.$/, '').trim() || 'value')
     properties[key] = {
@@ -85,7 +86,16 @@ export function heuristicTool(action) {
     } : {
       seedUrl: action.seedUrl,
       click: action.label,
-      fields: action.parameters.map((p) => ({ selector: p.selector, schemaKey: p.schemaKey })),
+      fields: action.parameters.map((p) => ({
+        selector: p.selector,
+        schemaKey: p.schemaKey,
+        // #task-add-textarea-tfrx4opvy is a different element on the next page
+        // load, so a recipe pinned to it can never replay. replay.js already
+        // falls back to name/placeholder/label - it just has to be handed them.
+        ...(p.name && !AUTO.test(p.name) ? { name: p.name } : {}),
+        ...(p.placeholder ? { placeholder: p.placeholder } : {}),
+        ...(p.label ? { label: p.label } : {}),
+      })),
       submit: true,
       expect: action.effect,
     },
