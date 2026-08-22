@@ -38,11 +38,17 @@ export async function fields(page) {
       if (!labelEl) labelEl = el.closest('label')
       let labelText = (labelEl?.innerText || '').trim()
       if (!labelText) {
-        const cell = el.closest('td, th, .form-group, .field, p, div')
-        const prev = cell?.previousElementSibling
-        const near = (prev?.innerText || '').trim()
-        // a neighbouring cell is only a label if it is short and not a control
-        if (near && near.length < 40 && !prev?.querySelector('input, select, textarea')) labelText = near
+        // Pre-ARIA forms label a control by putting text immediately before it -
+        // ParaBank uses <p>What type of Account would you like to open?</p>.
+        // Check the element's own predecessor before widening to its container.
+        const candidates = [el.previousElementSibling, el.closest('td, th, .form-group, .field')?.previousElementSibling]
+        for (const c of candidates) {
+          if (!c) continue
+          if (c.querySelector('input, select, textarea')) continue
+          const near = (c.innerText || '').trim()
+          // long enough to be a label, short enough not to be prose
+          if (near && near.length <= 90) { labelText = near; break }
+        }
       }
       const attr = (v) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 
