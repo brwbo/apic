@@ -20,11 +20,38 @@ product scores nothing.
 
 | Tech | Stage | Endpoint / notes |
 |---|---|---|
-| **h** | `explore` | **MCP: https://hub.hcompany.ai/mcp** - prefer the MCP endpoint over a bespoke HTTP integration |
+| **h** | `explore` | Models API, OpenAI-compatible. Base `https://api.hcompany.ai/v1/`, `Authorization: Bearer $HAI_API_KEY`. See note below |
 | **fal** | `perceive` | Fast VLM for meaningful-vs-cosmetic change judgement |
 | **OpenAI** | `synthesize`, `verify` | Schema synthesis, precondition inference, verification |
 | **Tavily** | `ground` | Docs -> domain vocabulary for tool names/descriptions |
-| **Pioneer** | `distill` | Small model distilled from fal's labels. Side challenge |
+| **Pioneer** | `distill` | **GLiNER2 encoder (~300M, $0.15/M) over the DOM diff text** - classifies state change + destructive, extracts domain nouns. One batched `POST /inference` per compile. Side challenge |
+
+### h - verified 2026-08-22, correcting an earlier error
+
+**`https://hub.hcompany.ai/mcp` is NOT a computer-use endpoint.** It is H Tech Hub's
+**documentation-search** MCP server - `search_h_tech_hub`, `query_docs_filesystem_h_tech_hub`,
+`submit_feedback`. It cannot drive a browser. An earlier version of this file told the
+`explore` stage to prefer it over "a bespoke HTTP integration"; that instruction was
+unimplementable and has been removed. (It *is* genuinely useful for looking up h's own
+docs and OpenAPI specs - that is how the facts below were confirmed.)
+
+**The Models API is the right endpoint, and `src/h.js` was already using it correctly.**
+
+| | |
+|---|---|
+| Base URL | `https://api.hcompany.ai/v1/` |
+| Auth | `Authorization: Bearer $HAI_API_KEY` (handled by the OpenAI client) |
+| Models | `holo3-1-35b-a3b` (free tier, rate-limited, no credit card), `holo3-122b-a10b` |
+| Keys | `https://portal.hcompany.ai/?product=modelsapi` |
+
+🔴 **The key must be a Models API key.** A key minted for another h product returns
+`401 Unauthorized` against `/v1/chat/completions` with a valid model ID - identical to
+the response for no key at all, so the 401 tells you nothing about which failure it is.
+`/v1/models` 401s unconditionally and is useless as a health check; probe
+`/v1/chat/completions` instead.
+
+⚠️ `holo1-5-7b-20250915` is not a real model ID. It was the default in `src/h.js` and
+`.env.example` until 2026-08-22 and never existed.
 
 **VEED is NOT a partner technology** - it is not on the Resources list.
 

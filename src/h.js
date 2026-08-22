@@ -12,10 +12,11 @@
  * stays the fallback: no key, a refusal or a bad response falls back rather
  * than failing the compile.
  */
+import 'dotenv/config' // h.js is imported directly by doctor and plan; never assume config.js loaded first
 import OpenAI from 'openai'
 
 const BASE_URL = process.env.HAI_MODEL_URL || 'https://api.hcompany.ai/v1'
-const MODEL = process.env.HAI_MODEL_NAME || 'holo1-5-7b-20250915'
+const MODEL = process.env.HAI_MODEL_NAME || 'holo3-1-35b-a3b'
 
 export function available() {
   return Boolean(process.env.HAI_API_KEY)
