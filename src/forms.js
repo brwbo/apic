@@ -76,31 +76,42 @@ export async function fill(page, discovered) {
   return used
 }
 
-/** The button that commits the form. */
+/**
+ * The control that commits the form.
+ *
+ * Modern apps use <button>Save</button>. Legacy apps - the ones with no API and
+ * therefore the whole point of this project - use <input type="submit"
+ * value="Save">, where the label lives in an attribute and innerText is empty.
+ * Reading only innerText makes every 2005-era app look like it has no buttons.
+ */
 export async function submitButton(page) {
-  const buttons = await page.$$('button:visible, [role="button"]:visible')
-  for (const b of buttons) {
-    const t = ((await b.innerText()) || '').trim()
-    if (SUBMIT.test(t)) return { handle: b, label: t }
+  const handles = await page.$$('button:visible, [role="button"]:visible, input[type="submit"]:visible, input[type="button"]:visible')
+  for (const h of handles) {
+    const label = await h.evaluate((el) => (el.value || el.innerText || '').trim())
+    if (label && SUBMIT.test(label)) return { handle: h, label }
+  }
+  // A lone submit input with an app-specific label ("Open New Account") is
+  // still the commit control even though it matches no generic verb.
+  const lone = await page.$$('input[type="submit"]:visible, input[type="button"]:visible')
+  if (lone.length === 1) {
+    const label = await lone[0].evaluate((el) => (el.value || '').trim())
+    return { handle: lone[0], label: label || 'submit' }
   }
   return null
 }
 
 /**
- * The button that confirms a destructive action in a modal.
- *
- * Deleting a task is two clicks, not one: DELETE opens a dialog whose confirm
- * button says "DO IT!". That is not a submit verb and never will be, so the
- * confirmation button is looked for separately and only inside a dialog - a
- * page-wide search for /^do it|yes/ would eventually click something else.
+ * The control that confirms a destructive action inside a modal.
+ * Kept separate from submitButton: a confirm is not a commit, and conflating
+ * them makes a delete dialog look like a form.
  */
 const CONFIRM = /^(do it|yes|confirm|delete|remove|ok)\b/i
 
 export async function confirmButton(page) {
-  const buttons = await page.$$('.modal button:visible, .modal-content button:visible, [role="dialog"] button:visible')
+  const buttons = await page.$$('.modal button:visible, .modal-content button:visible, [role="dialog"] button:visible, .modal input[type="button"]:visible, [role="dialog"] input[type="button"]:visible')
   for (const b of buttons) {
-    const t = ((await b.innerText()) || '').trim()
-    if (CONFIRM.test(t)) return { handle: b, label: t }
+    const t = await b.evaluate((el) => (el.value || el.innerText || '').trim())
+    if (t && CONFIRM.test(t)) return { handle: b, label: t }
   }
   return null
 }
