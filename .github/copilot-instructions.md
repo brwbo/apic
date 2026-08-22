@@ -1,0 +1,1 @@
+Follow every rule in AGENTS.md at the repo root. Key points: never print, log or commit API keys (repo is public; keys live in ~/.config/apic/env); never `git add -A`; keep files under 500 lines; every pipeline stage must run with no keys.

@@ -1,0 +1,3 @@
+# OpenAI Codex CLI project config. Instructions come from ../AGENTS.md.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
