@@ -20,9 +20,9 @@ export default function App() {
       <Stack />
       <Problem />
       <Compile />
+      <Partners />
       <Demo />
       <Stats />
-      <Partners />
       <Integrations />
       <About />
       <footer className="border-t border-white/10 px-6 py-10 sm:px-10">
