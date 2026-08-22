@@ -75,7 +75,8 @@ export async function replay(tool, args, { headless = true, session = null } = {
         return {
           ok: false, effect: 'none', expected: tool.recipe.expect, unfilled: [], added: [], removed: [],
           error: `no control on ${page.url()} matched what this tool opens with: ` +
-            [tool.provenance?.evidence?.control, tool.recipe.click].filter(Boolean).map((t) => `"${t}"`).join(' or '),
+            [...new Set([...(tool.provenance?.evidence?.controls || [tool.provenance?.evidence?.control]),
+              tool.recipe.click].filter(Boolean))].map((t) => `"${t}"`).join(' or '),
         }
       }
       await page.waitForTimeout(700)
@@ -90,19 +91,22 @@ export async function replay(tool, args, { headless = true, session = null } = {
       else unfilled.push(f.schemaKey)
     }
 
-    // An inline control has no submit button of its own, and the page it lives on
-    // has plenty that belong to something else. discoverTask() commits a rename
-    // by blurring it and nothing else; hunting a button here clicked a stranger's
-    // and left the edit uncommitted.
+    // How a control commits depends on what it is, and "inline" covers two very
+    // different things. A quick-add textarea takes its ADD button or Enter,
+    // exactly as discoverInline() drove it. A contenteditable heading has no
+    // button of its own - though the page it sits on has plenty belonging to
+    // something else - and saves when focus leaves it, which is what
+    // discoverTask() did. Driving either the other way types the value in and
+    // then never commits it, which reads downstream as "nothing was created".
+    const blurs = filled.length ? (await controlKind(page, filled[0].selector)) === 'contenteditable' : false
+
     let submitted = false
-    if (tool.recipe.submit && !tool.recipe.inline) {
+    if (tool.recipe.submit && !blurs) {
       const btn = await submitButton(page)
       if (btn) { await btn.handle.click({ timeout: 3000 }).catch(() => {}); await page.waitForTimeout(1200); submitted = true }
     }
-    // Nothing pressed means the control commits on blur, which is how
-    // discoverTask() saved the rename this tool was compiled from.
     if (!submitted && filled.length) {
-      await page.locator(filled[0].selector).first().press('Tab').catch(() => {})
+      await page.locator(filled[0].selector).first().press(blurs ? 'Tab' : 'Enter').catch(() => {})
       await page.waitForTimeout(1200)
     }
 
@@ -224,6 +228,13 @@ async function opener(page, tool) {
     try { await el.click({ timeout: 2500 }); return true } catch { /* next handle */ }
   }
   return false
+}
+
+/** A real form field, or an element made editable in place? They commit differently. */
+async function controlKind(page, selector) {
+  return page.locator(selector).first().evaluate((el) =>
+    el.isContentEditable && !/^(input|textarea|select)$/i.test(el.tagName) ? 'contenteditable' : 'field',
+  ).catch(() => 'field')
 }
 
 /** Can every one of these fields be typed into right now, without opening anything? */
