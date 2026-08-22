@@ -18,10 +18,11 @@ export async function replay(tool, args, { headless = true } = {}) {
       .filter({ hasText: tool.recipe.click }).first().click({ timeout: 4000 })
     await page.waitForTimeout(700)
 
+    const unfilled = []
     for (const f of tool.recipe.fields) {
-      if (!f.selector) continue
       const v = args[f.schemaKey]
-      if (v !== undefined) await page.fill(f.selector, String(v), { timeout: 2000 }).catch(() => {})
+      if (v === undefined) continue
+      if (!(await fillField(page, f, String(v)))) unfilled.push(f.schemaKey)
     }
 
     if (tool.recipe.submit) {
@@ -30,6 +31,38 @@ export async function replay(tool, args, { headless = true } = {}) {
     }
 
     const d = diff(before, await snapshot(page))
-    return { ok: d.changed && d.kind === tool.recipe.expect, effect: d.kind, expected: tool.recipe.expect, added: d.added.slice(0, 3) }
+    // A tool that submitted without setting its arguments has not done its job,
+    // however much the page changed. That is the failure mode that looks like success.
+    return {
+      ok: d.changed && d.kind === tool.recipe.expect && unfilled.length === 0,
+      effect: d.kind, expected: tool.recipe.expect, unfilled,
+      added: d.added.slice(0, 3),
+    }
   } finally { await browser.close() }
+}
+
+/**
+ * Ordered locator candidates: what was recorded at compile time, then semantic
+ * fallbacks derived from the field itself. Absorbing small UI drift here is far
+ * cheaper than escalating to a re-exploration in heal.js.
+ */
+function locators(f) {
+  const out = [f.selector, ...(f.selectors || [])]
+  if (f.name) out.push(`[name="${f.name}"]`)
+  if (f.placeholder) out.push(`[placeholder="${f.placeholder}"]`)
+  return [...new Set(out.filter(Boolean))]
+}
+
+/** Fill a compiled field, trying each locator in turn. Returns the one that worked. */
+async function fillField(page, f, value) {
+  for (const sel of locators(f)) {
+    try { await page.fill(sel, value, { timeout: 1500 }); return sel } catch { /* try the next */ }
+  }
+  if (f.label) {
+    try {
+      await page.getByLabel(f.label, { exact: false }).first().fill(value, { timeout: 1500 })
+      return `label=${f.label}`
+    } catch { /* exhausted */ }
+  }
+  return null
 }

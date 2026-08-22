@@ -43,7 +43,7 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
       effect: d.kind,
       changed: d.changed,
       committed,
-      evidence: { added: d.added.slice(0, 3), removed: d.removed.slice(0, 3), from: d.from, to: d.to },
+      evidence: { added: d.added.slice(0, 3), removed: d.removed.slice(0, 3), from: d.from, to: d.to, announced: d.announced },
       seedUrl,
     }
     if (d.changed) found.push(step)

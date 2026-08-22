@@ -8,9 +8,54 @@ emitted as an MCP server. The app's own API was never read.
 
 ## Tools
 
+### `createProject`
+
+NEW PROJECT. Confirmed by the app: "Success The project was successfully created."
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "projectTitle": {
+      "type": "string",
+      "description": "Title"
+    },
+    "typeToSearchForAProject": {
+      "type": "string",
+      "description": "Type to search for a project"
+    }
+  },
+  "required": []
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "added": [
+    "li||apic probe 12802\nMark this project as favorite\nOpen project ",
+    "a||apic probe 12802",
+    "a||List"
+  ],
+  "removed": [
+    "input||on",
+    "a||NEW SAVED FILTER",
+    "a||NEW PROJECT"
+  ],
+  "from": "/projects",
+  "to": "/projects/6/45",
+  "announced": {
+    "text": "Success The project was successfully created.",
+    "kind": "creation"
+  }
+}
+```
+</details>
+
 ### `createLabel`
 
-NEW LABEL in the target app. Observed effect: creation.
+NEW LABEL. Confirmed by the app: "Success The label was successfully created."
 
 ```json
 {
@@ -30,12 +75,16 @@ NEW LABEL in the target app. Observed effect: creation.
 ```json
 {
   "added": [
-    "a||apic probe 42656",
+    "a||apic probe 65941",
     "div|status|Success\nThe label was successfully created."
   ],
   "removed": [],
   "from": "/labels",
-  "to": "/labels"
+  "to": "/labels",
+  "announced": {
+    "text": "Success The label was successfully created.",
+    "kind": "creation"
+  }
 }
 ```
 </details>

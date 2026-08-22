@@ -20,11 +20,41 @@ export async function launch({ headless = true } = {}) {
 /** Vikunja login. Kept separate: auth is app-specific and not part of discovery. */
 export async function login(page, { url, user, pass } = config.target) {
   await page.goto(`${url}/login`, { waitUntil: 'domcontentloaded' })
-  await page.fill('#username', user)
-  await page.fill('#password', pass)
-  await page.click('button[type="submit"], button:has-text("Login")')
-  await page.waitForURL((u) => !u.pathname.includes('/login'), { timeout: 15000 })
-  return page.url()
+  // The submit click is swallowed if it lands before Vue attaches its handler:
+  // the button exists in the DOM well before the app hydrates, so Playwright
+  // clicks a dead element and no request is ever made. Measured at a ~30-50%
+  // cold-start failure rate, which is why this waits, then retries.
+  await page.waitForLoadState('networkidle').catch(() => {})
+
+  let status = 0
+  const watch = (r) => { if (r.url().includes('/api/v1/login')) status = r.status() }
+  page.on('response', watch)
+
+  try {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await page.fill('#username', user)
+      await page.fill('#password', pass)
+      await page.click('button[type="submit"], button:has-text("Login")')
+
+      // Client-side routing means no navigation lifecycle event to wait on.
+      const landed = await page
+        .waitForFunction(() => !location.pathname.includes('/login'), null, { timeout: 5000, polling: 150 })
+        .then(() => true)
+        .catch(() => false)
+      if (landed) return page.url()
+
+      // Retrying into a rate limiter only deepens the hole - fail loudly instead.
+      if (status === 429) {
+        throw new Error(
+          'Vikunja rate-limited the login (HTTP 429). Every replay() logs in fresh, ' +
+          'so a watch cycle over N tools costs N logins. Reuse a stored session or ' +
+          'raise the target\'s rate limit.',
+        )
+      }
+      await page.waitForTimeout(attempt * 1000) // back off before trying again
+    }
+    throw new Error(`login failed after 3 attempts as ${user} at ${url}${status ? ` (last login status ${status})` : ''}`)
+  } finally { page.off('response', watch) }
 }
 
 /** Every visible, enabled affordance on the current page. */

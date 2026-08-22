@@ -47,7 +47,9 @@ export function heuristicTool(action) {
   }
   return {
     name: nameFor(action.label),
-    description: `${action.label} in the target app. Observed effect: ${action.effect}.`,
+    description: action.evidence?.announced
+      ? `${action.label}. Confirmed by the app: "${action.evidence.announced.text}"`
+      : `${action.label} in the target app. Observed effect: ${action.effect}.`,
     inputSchema: { type: 'object', properties, required },
     // How the emitted server replays this action.
     recipe: {
@@ -61,10 +63,19 @@ export function heuristicTool(action) {
   }
 }
 
-export function synthesize(actions) {
+/**
+ * A tool exists only if the app itself confirmed the write.
+ *
+ * Node-counting produces plausible-looking tools for every button on the page.
+ * An announcement region saying "successfully created" is the app asserting
+ * that state changed, and it is the difference between a compiler and a
+ * confident guesser. Recall suffers; precision is what makes this trustworthy.
+ */
+export function synthesize(actions, { requireConfirmation = true } = {}) {
   const seen = new Set()
   return actions
-    .filter((a) => a.committed && a.effect !== 'navigation')
+    .filter((a) => a.committed)
+    .filter((a) => (requireConfirmation ? Boolean(a.evidence?.announced) : a.effect !== 'navigation'))
     .map(heuristicTool)
     .filter((t) => (seen.has(t.name) ? false : seen.add(t.name)))
 }

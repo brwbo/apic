@@ -11,6 +11,10 @@ const SUBMIT = /^(create|save|add|submit|done|confirm|ok)\b/i
 /** Visible, editable fields on the page - these become tool parameters. */
 export async function fields(page) {
   return page.evaluate(() => {
+    // Framework-generated ids (Vue useId, React useId, Headless UI, Radix, MUI)
+    // are stable only for a given component render order - they shift whenever
+    // the component tree changes. Never trust one as the primary handle.
+    const AUTO_ID = /^(v-\d+$|:r[0-9a-z]+:|headlessui-|radix-|mui-)/i
     const out = []
     for (const el of document.querySelectorAll('input, textarea, select, [contenteditable="true"]')) {
       const r = el.getBoundingClientRect()
@@ -18,14 +22,28 @@ export async function fields(page) {
       const type = el.getAttribute('type') || el.tagName.toLowerCase()
       if (['hidden', 'submit', 'button', 'checkbox', 'radio'].includes(type)) continue
       const id = el.id
+      const name = el.getAttribute('name') || ''
+      const placeholder = el.getAttribute('placeholder') || ''
       const labelEl = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : el.closest('label')
+      const attr = (v) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+
+      // Ordered locator chain, most durable first. A recorded selector outlives
+      // the UI only if it means something: `[name="projectTitle"]` survives a
+      // re-render, `#v-3` is a counter over Vue's component order and does not.
+      const selectors = []
+      if (name) selectors.push(`[name="${attr(name)}"]`)
+      if (id && !AUTO_ID.test(id)) selectors.push(`#${CSS.escape(id)}`)
+      if (placeholder) selectors.push(`[placeholder="${attr(placeholder)}"]`)
+      if (id && AUTO_ID.test(id)) selectors.push(`#${CSS.escape(id)}`) // last resort
+
       out.push({
-        name: el.getAttribute('name') || id || '',
+        name: name || id || '',
         label: (labelEl?.innerText || '').trim().slice(0, 40),
-        placeholder: el.getAttribute('placeholder') || '',
+        placeholder,
         type: type === 'textarea' ? 'text' : type,
         required: el.hasAttribute('required'),
-        selector: id ? `#${CSS.escape(id)}` : el.getAttribute('name') ? `[name="${el.getAttribute('name')}"]` : null,
+        selector: selectors[0] || null,
+        selectors,
       })
     }
     return out.filter((f) => f.selector)
@@ -37,10 +55,14 @@ export async function fill(page, discovered) {
   const used = []
   for (const f of discovered) {
     const value = fieldValue(f)
-    try {
-      await page.fill(f.selector, value, { timeout: 2000 })
-      used.push({ ...f, value })
-    } catch { /* not fillable - a select or a custom widget; skip */ }
+    // Record the locator that actually worked, not the one we guessed first.
+    let hit = null
+    for (const sel of f.selectors?.length ? f.selectors : [f.selector]) {
+      if (!sel) continue
+      try { await page.fill(sel, value, { timeout: 1500 }); hit = sel; break } catch { /* try the next */ }
+    }
+    if (hit) used.push({ ...f, value, selector: hit })
+    // no hit: not fillable - a select or a custom widget; skip
   }
   return used
 }

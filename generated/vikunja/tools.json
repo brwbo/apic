@@ -4,8 +4,63 @@
   "generatedBy": "apic",
   "tools": [
     {
+      "name": "createProject",
+      "description": "NEW PROJECT. Confirmed by the app: \"Success The project was successfully created.\"",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "projectTitle": {
+            "type": "string",
+            "description": "Title"
+          },
+          "typeToSearchForAProject": {
+            "type": "string",
+            "description": "Type to search for a project"
+          }
+        },
+        "required": []
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:3456/projects",
+        "click": "NEW PROJECT",
+        "fields": [
+          {
+            "selector": "[name=\"projectTitle\"]",
+            "schemaKey": "projectTitle"
+          },
+          {
+            "selector": "[placeholder=\"Type to search for a project…\"]",
+            "schemaKey": "typeToSearchForAProject"
+          }
+        ],
+        "submit": true,
+        "expect": "creation"
+      },
+      "provenance": {
+        "evidence": {
+          "added": [
+            "li||apic probe 12802\nMark this project as favorite\nOpen project ",
+            "a||apic probe 12802",
+            "a||List"
+          ],
+          "removed": [
+            "input||on",
+            "a||NEW SAVED FILTER",
+            "a||NEW PROJECT"
+          ],
+          "from": "/projects",
+          "to": "/projects/6/45",
+          "announced": {
+            "text": "Success The project was successfully created.",
+            "kind": "creation"
+          }
+        },
+        "discoveredBy": "heuristic"
+      }
+    },
+    {
       "name": "createLabel",
-      "description": "NEW LABEL in the target app. Observed effect: creation.",
+      "description": "NEW LABEL. Confirmed by the app: \"Success The label was successfully created.\"",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -31,12 +86,16 @@
       "provenance": {
         "evidence": {
           "added": [
-            "a||apic probe 42656",
+            "a||apic probe 65941",
             "div|status|Success\nThe label was successfully created."
           ],
           "removed": [],
           "from": "/labels",
-          "to": "/labels"
+          "to": "/labels",
+          "announced": {
+            "text": "Success The label was successfully created.",
+            "kind": "creation"
+          }
         },
         "discoveredBy": "heuristic"
       }
