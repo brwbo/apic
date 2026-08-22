@@ -5,12 +5,35 @@ import { cn } from "@/lib/utils";
 
 const STAGES = ["Explore", "Perceive", "Synthesise", "Ground", "Verify", "Emit", "Heal", "Watch"];
 
+/**
+ * The five partner technologies, in pipeline order.
+ *
+ * Deliberately a local copy of stack.tsx's list rather than an import: the two
+ * sections answer different questions - the hero says who is involved, the
+ * stack row says what each one decides - and coupling them means a change to
+ * one silently rewrites the other.
+ *
+ * White-filled marks on a near-black backdrop, so `openai_dark` is the light
+ * artwork rather than the dark one. Height-constrained with width left to the
+ * artwork, because h's mark is a circle beside an H at 30x18 and a square box
+ * would squash it.
+ */
+const PARTNERS = [
+  { name: "h", src: "/logos/h.svg" },
+  { name: "fal", src: "/logos/fal.svg" },
+  { name: "OpenAI", src: "/logos/openai_dark.svg" },
+  { name: "Tavily", src: "/logos/tavily.svg" },
+  { name: "Pioneer", src: "/logos/pioneer.svg" },
+];
+
 export interface HeroProps {
   eyebrow?: string;
   wordmark?: string;
   headline?: string;
   sub?: string;
   stages?: string[];
+  /** Partner marks under the stage row. Pass [] to hide them (the slide exporter does). */
+  partners?: { name: string; src: string }[];
   /** Looping backdrop video. Set to null to fall back to the procedural canvas effect. */
   videoSrc?: string | null;
   /** Freeze the backdrop — used by the slide exporter. */
@@ -26,6 +49,7 @@ export function Hero({
   headline = "An MCP server that manufactures MCP servers.",
   sub = "When an agent hits an app with no API, it calls apic. A computer-use agent operates the UI, verifies what actually changed, and hands back typed tools — then repairs them when the UI moves.",
   stages = STAGES,
+  partners = PARTNERS,
   videoSrc = "/hero.webm",
   still = false,
   stillTime = 1.0,
@@ -137,6 +161,33 @@ export function Hero({
             </span>
           ))}
         </div>
+
+        {partners.length > 0 && (
+          <div className="mt-9 flex flex-col items-center gap-4">
+            <p
+              className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/40"
+              style={{ textShadow: "0 1px 18px rgba(8,3,7,0.95)" }}
+            >
+              Built with
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4">
+              {partners.map((p) => (
+                <img
+                  key={p.name}
+                  src={p.src}
+                  alt={p.name}
+                  title={p.name}
+                  height={18}
+                  // The backdrop is a moving video, so the marks need the same
+                  // separation the type gets from its text-shadow - at plain 50%
+                  // opacity they disappear into the bright frames.
+                  style={{ height: 18, width: "auto", filter: "drop-shadow(0 1px 14px rgba(8,3,7,0.95))" }}
+                  className="shrink-0 opacity-70 transition-opacity duration-200 hover:opacity-100"
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {!still && (
