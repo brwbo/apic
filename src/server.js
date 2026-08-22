@@ -27,7 +27,12 @@ import { config } from './config.js'
 
 // Overridable so a cold-start ("no tools until you compile one") can be
 // demonstrated without moving the real output directory aside.
-const GENERATED = process.env.APIC_GENERATED || join(ROOT, 'generated')
+// APIC_OUT_DIR is what verify, score, race and watch read. server.js used to
+// read only APIC_GENERATED, so pointing the tooling at a rescue bundle moved
+// five commands and left the sixth serving the live directory - a trap that
+// costs nothing to remove and is confusing in a demo. Both work; OUT_DIR wins.
+const OUT_DIR = process.env.APIC_OUT_DIR || process.env.APIC_GENERATED
+const GENERATED = OUT_DIR ? (OUT_DIR.startsWith('/') ? OUT_DIR : join(ROOT, OUT_DIR)) : join(ROOT, 'generated')
 const log = (...m) => console.error('[apic]', ...m)
 
 /** publicName -> { app, tool }. The single source of truth for tools/list. */
