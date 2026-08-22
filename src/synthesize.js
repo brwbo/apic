@@ -12,6 +12,7 @@
  */
 
 const VERBS = [
+  [/^move\b/i, 'move'],
   [/^(new|add|create)\b|^\+$/i, 'create'],
   [/^(edit|rename|update|change)\b/i, 'update'],
   [/^(delete|remove|trash)\b/i, 'delete'],
@@ -77,7 +78,11 @@ export function heuristicTool(action) {
     destructive: Boolean(action.destructive),
     inputSchema: { type: 'object', properties, required },
     // How the emitted server replays this action.
-    recipe: {
+    recipe: action.drag ? {
+      seedUrl: action.seedUrl,
+      drag: action.drag,
+      expect: 'relocation',
+    } : {
       seedUrl: action.seedUrl,
       click: action.label,
       fields: action.parameters.map((p) => ({ selector: p.selector, schemaKey: p.schemaKey })),
@@ -100,6 +105,10 @@ export function synthesize(actions, { requireConfirmation = true } = {}) {
   const seen = new Set()
   return actions
     .filter((a) => a.committed)
+    // persist.js reloaded the page and could not find what we submitted, so the
+    // app displayed our input rather than storing it. null means it could not
+    // be established either way, and that is not grounds to reject.
+    .filter((a) => a.persisted !== false)
     .filter((a) => !/apic probe/i.test(a.label))
     .filter((a) => (requireConfirmation ? Boolean(a.evidence?.announced) : a.effect !== 'navigation'))
     .map(heuristicTool)

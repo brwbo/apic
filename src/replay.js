@@ -4,6 +4,7 @@
  */
 import { snapshot, diff } from './perceive.js'
 import { submitButton } from './forms.js'
+import { board, drag, relocated } from './kanban.js'
 import { openSession, ensure, closeSession } from './session.js'
 
 /**
@@ -17,7 +18,29 @@ export async function replay(tool, args, { headless = true, session = null } = {
   try {
     if (!s.authed) await ensure(s)
     await page.goto(tool.recipe.seedUrl, { waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(500)
+    await page.waitForTimeout(tool.recipe.drag ? 2200 : 500)
+
+    if (tool.recipe.drag) {
+      const { columnSelector, cardSelector } = tool.recipe.drag
+      const b4 = await board(page, columnSelector)
+      const wanted = String(args.card || '')
+      let fromIdx = b4.findIndex((c) => c.cards.some((t) => t.includes(wanted)))
+      if (fromIdx < 0) fromIdx = b4.findIndex((c) => c.cards.length)
+      const toIdx = args.column
+        ? b4.findIndex((c) => c.title.toLowerCase().includes(String(args.column).toLowerCase()))
+        : b4.findIndex((_, i) => i !== fromIdx)
+      if (fromIdx < 0 || toIdx < 0) return { ok: false, error: 'column or card not found' }
+
+      const cardLoc = wanted
+        ? page.locator(columnSelector).nth(fromIdx).locator(cardSelector).filter({ hasText: wanted }).first()
+        : page.locator(columnSelector).nth(fromIdx).locator(cardSelector).first()
+      await drag(page, cardLoc, page.locator(columnSelector).nth(toIdx))
+      const moved = relocated(b4, await board(page, columnSelector))
+      return moved
+        ? { ok: true, effect: 'relocation', moved: `"${moved.card}" ${moved.from} -> ${moved.to}` }
+        : { ok: false, effect: 'none', expected: 'relocation' }
+    }
+
     const before = await snapshot(page)
 
     await page.locator('button:visible, a[href]:visible, [role="button"]:visible')

@@ -8,58 +8,9 @@ emitted as an MCP server. The app's own API was never read.
 
 ## Tools
 
-### `createSavedFilter`
-
-NEW SAVED FILTER. Confirmed: the submitted value appeared in the app after the action.
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "title": {
-      "type": "string",
-      "description": "Title"
-    },
-    "descriptionForThisFilterHere": {
-      "type": "string",
-      "description": "Add a description for this filter here,"
-    },
-    "filterQuery": {
-      "type": "string",
-      "description": "Filter query"
-    }
-  },
-  "required": []
-}
-```
-
-<details><summary>evidence</summary>
-
-```json
-{
-  "added": [
-    "a||Project description",
-    "li||apic probe 31784\nMark this project as favorite\nOpen project ",
-    "a||apic probe 31784"
-  ],
-  "removed": [
-    "input||on",
-    "a||NEW SAVED FILTER",
-    "a||NEW PROJECT"
-  ],
-  "from": "/projects",
-  "to": "/projects/-16/113",
-  "announced": {
-    "text": "apic probe 31784\nMark this project as favorite\nOpen project ",
-    "kind": "creation"
-  }
-}
-```
-</details>
-
 ### `createProject`
 
-NEW PROJECT. Confirmed by the app: "Success The project was successfully created."
+create project. Confirmed by the app: "Success The project was successfully created."
 
 ```json
 {
@@ -82,9 +33,10 @@ NEW PROJECT. Confirmed by the app: "Success The project was successfully created
 
 ```json
 {
+  "control": "NEW PROJECT",
   "added": [
-    "li||apic probe 34582\nMark this project as favorite\nOpen project ",
-    "a||apic probe 34582",
+    "li||apic probe 42062\nMark this project as favorite\nOpen project ",
+    "a||apic probe 42062",
     "a||List"
   ],
   "removed": [
@@ -93,7 +45,7 @@ NEW PROJECT. Confirmed by the app: "Success The project was successfully created
     "a||NEW PROJECT"
   ],
   "from": "/projects",
-  "to": "/projects/15/117",
+  "to": "/projects/32/233",
   "announced": {
     "text": "Success The project was successfully created.",
     "kind": "creation"
@@ -104,7 +56,7 @@ NEW PROJECT. Confirmed by the app: "Success The project was successfully created
 
 ### `createLabel`
 
-NEW LABEL. Confirmed by the app: "Success The label was successfully created."
+create label. Confirmed by the app: "Success The label was successfully created."
 
 ```json
 {
@@ -123,8 +75,9 @@ NEW LABEL. Confirmed by the app: "Success The label was successfully created."
 
 ```json
 {
+  "control": "NEW LABEL",
   "added": [
-    "a||apic probe 45050",
+    "a||apic probe 46097",
     "div|status|Success\nThe label was successfully created."
   ],
   "removed": [],
@@ -138,17 +91,21 @@ NEW LABEL. Confirmed by the app: "Success The label was successfully created."
 ```
 </details>
 
-### `doFilters`
+### `updateLabel`
 
-FILTERS. Confirmed: the submitted value appeared in the app after the action.
+update label. Confirmed by the app: "Success The label was successfully updated."
 
 ```json
 {
   "type": "object",
   "properties": {
-    "filterQuery": {
+    "v3": {
       "type": "string",
-      "description": "Filter query"
+      "description": "Title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description"
     }
   },
   "required": []
@@ -159,17 +116,20 @@ FILTERS. Confirmed: the submitted value appeared in the app after the action.
 
 ```json
 {
+  "control": "Edit Label",
   "added": [
-    "button||Close dialog",
-    "div|search|Filters\n\napic\n\nCustom\nNow\nStart of today\nEnd of today\nBeginn",
-    "div|textbox|Filter query"
+    "a||apic probe 51440",
+    "button||Close",
+    "input||The label title goes here…"
   ],
-  "removed": [],
-  "from": "/projects/15/117",
-  "to": "/projects/15/117",
+  "removed": [
+    "a||apic labelTitle vmt49aafb-12"
+  ],
+  "from": "/labels",
+  "to": "/labels",
   "announced": {
-    "text": "Filters\n\napic\n\nCustom\nNow\nStart of today\nEnd of today\nBeginn",
-    "kind": "creation"
+    "text": "Success The label was successfully updated.",
+    "kind": "mutation"
   }
 }
 ```
@@ -177,7 +137,7 @@ FILTERS. Confirmed: the submitted value appeared in the app after the action.
 
 ### `createTask`
 
-Add a task. Confirmed: the submitted value appeared in the app after the action.
+create task. Confirmed: the submitted value appeared in the app after the action.
 
 ```json
 {
@@ -196,19 +156,212 @@ Add a task. Confirmed: the submitted value appeared in the app after the action.
 
 ```json
 {
+  "control": "Create a task.",
   "added": [
-    "input||Mark 'apic probe 77020' as done",
-    "a||apic probe 77020",
+    "input||Mark 'apic probe 55646' as done",
+    "a||apic probe 55646",
     "button||Add to Favorites"
   ],
   "removed": [
     "button||Create a task."
   ],
-  "from": "/projects/15/117",
-  "to": "/projects/15/117",
+  "from": "/projects/32/233",
+  "to": "/projects/32/233",
   "announced": {
-    "text": "apic probe 77020",
+    "text": "apic probe 55646",
     "kind": "creation"
+  }
+}
+```
+</details>
+
+### `moveTask`
+
+move task. Confirmed: the submitted value appeared in the app after the action.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "card": {
+      "type": "string",
+      "description": "Card"
+    },
+    "column": {
+      "type": "string",
+      "description": "Target column"
+    }
+  },
+  "required": [
+    "card",
+    "column"
+  ]
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "announced": {
+    "text": "\"#2 apic probe 58876\" moved from To-Do to Doing",
+    "kind": "relocation"
+  },
+  "added": [],
+  "removed": [],
+  "from": "http://localhost:3456/projects/32/236",
+  "to": "http://localhost:3456/projects/32/236",
+  "control": "Move card between columns"
+}
+```
+</details>
+
+### `updateTask`
+
+update task. Confirmed: the submitted value appeared in the app after the action.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title"
+    }
+  },
+  "required": []
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "control": "Title",
+  "added": [],
+  "removed": [],
+  "from": "/tasks/287",
+  "to": "/tasks/287",
+  "announced": {
+    "text": "reloaded and the title is still \"apic probe 70617\"",
+    "kind": "mutation"
+  }
+}
+```
+</details>
+
+### `markTask`
+
+mark task. Confirmed by the app: "Success The task was saved successfully. UNDO"
+
+```json
+{
+  "type": "object",
+  "properties": {},
+  "required": []
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "control": "MARK TASK DONE!",
+  "added": [
+    "button||MARK AS UNDONE",
+    "div|status|Success\nThe task was saved successfully.\nUNDO",
+    "button||UNDO"
+  ],
+  "removed": [
+    "button||MARK TASK DONE!"
+  ],
+  "from": "/tasks/287",
+  "to": "/tasks/287",
+  "announced": {
+    "text": "Success The task was saved successfully. UNDO",
+    "kind": "mutation"
+  }
+}
+```
+</details>
+
+### `assignLabel`
+
+assign label. Confirmed by the app: "Success The label has been created and added successfully."
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "toAddALabel": {
+      "type": "string",
+      "description": "Type to add a label"
+    }
+  },
+  "required": []
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "control": "ADD LABELS",
+  "added": [
+    "button||Remove label apic probe 87259",
+    "input|combobox|Type to add a label…",
+    "div|status|Success\nThe label has been created and added successfully."
+  ],
+  "removed": [],
+  "from": "/tasks/287",
+  "to": "/tasks/287",
+  "announced": {
+    "text": "Success The label has been created and added successfully.",
+    "kind": "creation"
+  }
+}
+```
+</details>
+
+### `deleteTask`
+
+delete task. Confirmed by the app: "Success The task has been deleted successfully."
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "confirm": {
+      "type": "boolean",
+      "description": "Must be true. This action destroys state and cannot be undone."
+    }
+  },
+  "required": [
+    "confirm"
+  ]
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "control": "DELETE",
+  "added": [
+    "a||List",
+    "a||Gantt",
+    "a||Table"
+  ],
+  "removed": [
+    "button||Back to project",
+    "button||#2",
+    "h1||Title"
+  ],
+  "from": "/tasks/287",
+  "to": "/projects/32/236",
+  "announced": {
+    "text": "Success The task has been deleted successfully.",
+    "kind": "deletion"
   }
 }
 ```
