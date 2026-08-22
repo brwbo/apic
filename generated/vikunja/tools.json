@@ -75,10 +75,11 @@
       },
       "verification": {
         "verified": true,
-        "reason": "The app confirmed success with the message 'Success The project was successfully created.' and the new project title appeared in a list item node, demonstrating the creation effect.",
-        "at": "2026-08-22T11:43:52.283Z",
+        "reason": "The app confirmed success with the message 'Success The project was successfully created.' and the new project title appeared in a list item node.",
+        "at": "2026-08-22T11:48:27.685Z",
         "by": "openai/gpt-4.1-mini"
-      }
+      },
+      "healedAt": "2026-08-22T11:46:32.898Z"
     },
     {
       "name": "createLabel",
@@ -140,8 +141,8 @@
       },
       "verification": {
         "verified": true,
-        "reason": "The app confirmed success with a status node stating 'Success The label was successfully created.' and the new label appeared in the DOM, demonstrating the predicted creation effect.",
-        "at": "2026-08-22T11:43:58.508Z",
+        "reason": "The app displayed a success status message confirming the label was successfully created, and the new label appeared in the DOM distinct from the input field.",
+        "at": "2026-08-22T11:48:33.767Z",
         "by": "openai/gpt-4.1-mini"
       }
     },
@@ -205,8 +206,8 @@
       },
       "verification": {
         "verified": true,
-        "reason": "The app confirmed success with the message 'Success The label was successfully updated.' and the new label text appeared in a node distinct from the input field.",
-        "at": "2026-08-22T11:44:07.484Z",
+        "reason": "The app confirmed success with the message 'Success The label was successfully updated.'",
+        "at": "2026-08-22T11:48:42.615Z",
         "by": "openai/gpt-4.1-mini"
       }
     },
@@ -272,8 +273,8 @@
       },
       "verification": {
         "verified": true,
-        "reason": "The submitted task 'apic task vmt4b89ss-3' appeared in a new DOM node distinct from the input field, confirming creation.",
-        "at": "2026-08-22T11:44:26.431Z",
+        "reason": "The submitted task 'apic task vmt4be6x8-3' appeared in a new DOM node distinct from the input field, confirming creation.",
+        "at": "2026-08-22T11:49:01.303Z",
         "by": "openai/gpt-4.1-mini"
       }
     },
@@ -330,8 +331,8 @@
       },
       "verification": {
         "verified": true,
-        "reason": "The observed effect was relocation with changes in the app, matching the predicted effect and confirmed by the submitted value appearing after the action.",
-        "at": "2026-08-22T11:44:35.080Z",
+        "reason": "The observed effect was relocation with changes in the DOM, matching the predicted effect and the submitted value appearing in the app after the action.",
+        "at": "2026-08-22T11:49:09.571Z",
         "by": "openai/gpt-4.1-mini"
       }
     },
@@ -403,8 +404,8 @@
       },
       "verification": {
         "verified": true,
-        "reason": "The submitted value 'apic title vmt4b89ss-5' appeared in an h1 node, confirming the update task action succeeded.",
-        "at": "2026-08-22T11:44:42.938Z",
+        "reason": "The submitted value 'apic title vmt4be6x8-5' appeared in an h1 node, confirming the update task action succeeded.",
+        "at": "2026-08-22T11:49:17.268Z",
         "by": "openai/gpt-4.1-mini"
       }
     },
@@ -479,77 +480,9 @@
       },
       "verification": {
         "verified": true,
-        "reason": "The app confirmed success with the message 'Success The label has been created and added successfully.' indicating the predicted creation effect occurred.",
-        "at": "2026-08-22T11:45:04.095Z",
+        "reason": "The app confirmed success with the message 'Success The label has been created and added successfully.'",
+        "at": "2026-08-22T11:49:27.175Z",
         "by": "openai/gpt-4.1-mini"
-      }
-    }
-  ],
-  "rejected": [
-    {
-      "name": "markTask",
-      "description": "mark task. Confirmed by the app: \"Success The task was saved successfully. UNDO\"",
-      "destructive": false,
-      "inputSchema": {
-        "type": "object",
-        "properties": {},
-        "required": []
-      },
-      "recipe": {
-        "seedUrl": "http://localhost:3456/tasks/50",
-        "seed": {
-          "from": "/projects/22/89",
-          "pattern": "^/tasks/\\d+$",
-          "create": {
-            "click": "Add a task",
-            "fields": [
-              {
-                "selector": "#task-add-textarea-nk07r1ap6",
-                "placeholder": "Add a task…",
-                "label": "Add a task…"
-              }
-            ]
-          }
-        },
-        "click": "mark task",
-        "fields": [],
-        "submit": true,
-        "expect": "mutation"
-      },
-      "provenance": {
-        "evidence": {
-          "control": "MARK TASK DONE!",
-          "controls": [
-            "MARK TASK DONE!"
-          ],
-          "added": [
-            "button||MARK AS UNDONE",
-            "div|status|Success\nThe task was saved successfully.\nUNDO",
-            "button||UNDO"
-          ],
-          "removed": [
-            "button||MARK TASK DONE!"
-          ],
-          "from": "/tasks/50",
-          "to": "/tasks/50",
-          "announced": {
-            "text": "Success The task was saved successfully. UNDO",
-            "kind": "mutation",
-            "via": "banner"
-          }
-        },
-        "perception": {
-          "kind": "mutation",
-          "confidence": null,
-          "source": "heuristic"
-        },
-        "discoveredBy": "heuristic"
-      },
-      "verification": {
-        "verified": false,
-        "reason": "observed mutation but nothing confirmed a write: no success banner, and no argument echoed outside the field it was typed into",
-        "at": "2026-08-22T11:44:53.286Z",
-        "by": "deterministic diff (no OPENAI_API_KEY - model judge skipped); openai/gpt-4.1-mini disagreed but cannot overturn a rejection"
       }
     },
     {
@@ -621,12 +554,80 @@
         "discoveredBy": "heuristic"
       },
       "verification": {
+        "verified": true,
+        "reason": "The app confirmed the deletion with the success message 'Success The task has been deleted successfully.'",
+        "at": "2026-08-22T11:49:48.719Z",
+        "by": "openai/gpt-4.1-mini"
+      }
+    }
+  ],
+  "rejected": [
+    {
+      "name": "markTask",
+      "description": "mark task. Confirmed by the app: \"Success The task was saved successfully. UNDO\"",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:3456/tasks/50",
+        "seed": {
+          "from": "/projects/22/89",
+          "pattern": "^/tasks/\\d+$",
+          "create": {
+            "click": "Add a task",
+            "fields": [
+              {
+                "selector": "#task-add-textarea-nk07r1ap6",
+                "placeholder": "Add a task…",
+                "label": "Add a task…"
+              }
+            ]
+          }
+        },
+        "click": "mark task",
+        "fields": [],
+        "submit": true,
+        "expect": "mutation"
+      },
+      "provenance": {
+        "evidence": {
+          "control": "MARK TASK DONE!",
+          "controls": [
+            "MARK TASK DONE!"
+          ],
+          "added": [
+            "button||MARK AS UNDONE",
+            "div|status|Success\nThe task was saved successfully.\nUNDO",
+            "button||UNDO"
+          ],
+          "removed": [
+            "button||MARK TASK DONE!"
+          ],
+          "from": "/tasks/50",
+          "to": "/tasks/50",
+          "announced": {
+            "text": "Success The task was saved successfully. UNDO",
+            "kind": "mutation",
+            "via": "banner"
+          }
+        },
+        "perception": {
+          "kind": "mutation",
+          "confidence": null,
+          "source": "heuristic"
+        },
+        "discoveredBy": "heuristic"
+      },
+      "verification": {
         "verified": false,
-        "reason": "observed deletion but nothing confirmed a write: no success banner, and no argument echoed outside the field it was typed into",
-        "at": "2026-08-22T11:45:15.537Z",
+        "reason": "observed mutation but nothing confirmed a write: no success banner, and no argument echoed outside the field it was typed into",
+        "at": "2026-08-22T11:49:37.347Z",
         "by": "deterministic diff (no OPENAI_API_KEY - model judge skipped); openai/gpt-4.1-mini disagreed but cannot overturn a rejection"
       }
     }
   ],
-  "verifiedAt": "2026-08-22T11:45:15.566Z"
+  "verifiedAt": "2026-08-22T11:49:48.758Z"
 }

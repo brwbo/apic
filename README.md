@@ -79,14 +79,13 @@ recall number means something.
 ```
 RECALL     8/18    board write-ops discovered
 PRECISION  9/9     emitted tools that are real
-VERIFIED   7/9     survived a cold replay with unseen arguments
+VERIFIED   8/9     survived a cold replay with unseen arguments
 ```
 
-Nine tools discovered: `createProject`, `createLabel`, `updateLabel`,
-`createTask`, `moveTask`, `updateTask`, `markTask`, `assignLabel`,
-`deleteTask`. Seven are served; `markTask` and `deleteTask` are rejected and
-kept in `tools.json` with `verified: false` — **a rejected tool is evidence
-about the compiler, not garbage.**
+Nine tools discovered, eight served. `markTask` is rejected and kept in
+`tools.json` with `verified: false` — **a rejected tool is evidence about the
+compiler, not garbage.** Marking a task done produces no banner and echoes no
+argument, so nothing confirms the write, and an unconfirmed tool is not served.
 
 Continuous verification over a live afternoon:
 
@@ -179,11 +178,9 @@ Stated plainly, because a compiler that hides its failure modes isn't one.
   authenticates through the same discovered login with no configuration, but
   discovery returns zero candidates there. Unresolved.
 - **8/18 recall.** Missing: bucket creation, comments, relations and attachments.
-- **`markTask` and `deleteTask` fail verification** for the same reason
-  relocation used to: the effect is observed and correct, but the confirmation
-  gate wants a banner or an echoed value, and a deletion produces neither. The
-  disappearance of the row you targeted is its own evidence; the judge doesn't
-  know that yet.
+- **`markTask` fails verification.** The effect is observed and correct, but
+  toggling a checkbox produces no banner and echoes no argument, so nothing
+  independently confirms the write. It stays rejected rather than served.
 - **Watch treats every failure as drift.** Real flake-vs-drift classification
   doesn't exist. Three false-positive classes were fixed by hand — rate
   limiting, token expiry, and a crashed page — but the general problem stands.

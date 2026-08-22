@@ -311,6 +311,54 @@ assign label. Confirmed by the app: "Success The label has been created and adde
 ```
 </details>
 
+### `deleteTask`
+
+delete task. Confirmed by the app: "Success The task has been deleted successfully."
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "confirm": {
+      "type": "boolean",
+      "description": "Must be true. This action destroys state and cannot be undone."
+    }
+  },
+  "required": [
+    "confirm"
+  ]
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "control": "DELETE",
+  "controls": [
+    "DELETE"
+  ],
+  "added": [
+    "a||List",
+    "a||Gantt",
+    "a||Table"
+  ],
+  "removed": [
+    "button||Back to project",
+    "button||#2",
+    "h1||Title"
+  ],
+  "from": "/tasks/50",
+  "to": "/projects/22/92",
+  "announced": {
+    "text": "Success The task has been deleted successfully.",
+    "kind": "deletion",
+    "via": "banner"
+  }
+}
+```
+</details>
+
 ## Run
 
 ```bash

@@ -117,6 +117,20 @@ function judgeDiff(tool, args, result) {
     return { verified: true, reason: result.moved ? `the card relocated: ${result.moved}` : 'the card changed column', by }
   }
 
+  // A deletion announces nothing and echoes nothing: the argument was never
+  // typed anywhere, and the row it removed is by definition no longer on the
+  // page. Net removal with no compensating addition is the evidence - the same
+  // reasoning that makes relocation self-evident.
+  if (tool.recipe?.expect === 'deletion' && result.effect === 'deletion') {
+    // NB: both arrays are truncated to 3 by replay, so comparing their lengths
+    // here is meaningless. perceive() already established net removal when it
+    // classified the effect as a deletion - that is the fact being trusted.
+    const removed = result.removed || []
+    if (removed.length) {
+      return { verified: true, reason: `${removed.length} node(s) removed with nothing replacing them: "${removed[0].split('|').pop().slice(0, 50)}"`, by }
+    }
+  }
+
   const banner = added.find((a) => /\|(status|alert)\|/.test(a) && SUCCESS.test(a))
   if (banner) return { verified: true, reason: `the app announced it: "${banner.split('|').pop().replace(/\n/g, ' ').slice(0, 60)}"`, by }
 
