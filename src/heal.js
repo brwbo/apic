@@ -13,7 +13,7 @@ import { discoverOn, discoverInline } from './discover.js'
 import { synthesize } from './synthesize.js'
 
 /**
- * @returns {{repaired:boolean, recipe?:object, note:string}}
+ * @returns {{repaired:boolean, recipe?:object, inputSchema?:object, provenance?:object, note:string}}
  */
 export async function heal(tool, session) {
   const { page } = session
@@ -36,10 +36,16 @@ export async function heal(tool, session) {
 
   const before = JSON.stringify(tool.recipe)
   const after = JSON.stringify(match.recipe)
+  // The provenance travels with the recipe, and it is not decoration: replay's
+  // opener() clicks by the control handles recorded there, trying them BEFORE
+  // recipe.click. A repair that leaves them behind hands the retry the very
+  // text that just stopped resolving - the tool re-opens on a button the deploy
+  // renamed, and heals forever without ever going green.
   return {
     repaired: true,
     recipe: match.recipe,
     inputSchema: match.inputSchema,
+    provenance: match.provenance,
     note: before === after ? 'recipe unchanged - failure was not the recipe' : `recipe updated (${describeDelta(tool.recipe, match.recipe)})`,
   }
 }
@@ -47,6 +53,7 @@ export async function heal(tool, session) {
 function describeDelta(a, b) {
   const parts = []
   if (a.click !== b.click) parts.push(`click "${a.click}" -> "${b.click}"`)
+  if (a.inline !== b.inline) parts.push(`inline ${a.inline ? 'yes' : 'no'} -> ${b.inline ? 'yes' : 'no'}`)
   const as = (a.fields || []).map((f) => f.selector).join(),
         bs = (b.fields || []).map((f) => f.selector).join()
   if (as !== bs) parts.push('selectors re-resolved')

@@ -111,7 +111,12 @@ while (!stop) {
     let fix = await heal(tool, session)
     if (!fix.repaired && DEAD.test(fix.note || '')) { await revive('heal hit a dead page'); fix = await heal(tool, session) }
     if (fix.repaired) {
-      Object.assign(tool, { recipe: fix.recipe, inputSchema: fix.inputSchema || tool.inputSchema, healedAt: new Date(Date.now()).toISOString() })
+      Object.assign(tool, {
+        recipe: fix.recipe,
+        inputSchema: fix.inputSchema || tool.inputSchema,
+        provenance: fix.provenance || tool.provenance,
+        healedAt: new Date(Date.now()).toISOString(),
+      })
       save(doc)
       const after = await replay(tool, args(tool), { session }).catch(() => ({ ok: false }))
       if (after.ok) {

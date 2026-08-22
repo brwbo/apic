@@ -107,6 +107,58 @@ claude mcp remove apic -s local && claude mcp add apic -- node /Users/brwbo/Proj
 or just start a new session. The compiled tools are files on disk, not session
 state — the restart is a reconnect, never a recompile.
 
+## The two dead ends, and what the server does with them
+
+A client only meets apic at the moment something is missing. Both of those
+moments are answered on the call path rather than reported.
+
+**A tool that does not exist.** `tools/call` for an unregistered name does not
+come back as a bare `unknown tool`. It comes back as the compile that would
+create it, arguments already filled in:
+
+```
+--- WALL 1: a tool that does not exist ---
+isError: true
+unknown tool: createIssue
+
+No compiled tool exposes that action (compiled so far: vikunja). If the app has no API for it, make one:
+
+    compile_app { "url": "http://localhost:3456", "goal": "createIssue" }
+
+That explores the app's UI, synthesises typed tools, registers them on this running server
+and announces them - so createIssue may exist a minute from now. Compile, then retry this call.
+
+Callable right now: createLabel
+```
+
+**A tool the app has moved out from under.** `watch.js` heals on a timer; the
+server heals on demand, through the same `heal()`. The tool goes red, the
+compiler re-explores that one action, the repair is written back to
+`generated/<app>/tools.json`, and the call is retried before the caller ever
+sees a failure. Verified against a recipe whose recorded handles had all been
+invalidated - a deploy renaming the control:
+
+```
+[apic] createLabel is red (no control on http://localhost:3456/labels matched what this
+       tool opens with: "ADD LABEL (RENAMED)" or "create label RENAMED-BY-A-DEPLOY")
+       - re-exploring to heal it
+[apic] createLabel healed in 13.6s (recipe updated (click "..." -> "create label";
+       selectors re-resolved)); retry passed
+
+returned in 28.9s, isError: false
+{ "ok": true, "effect": "creation", "healed": { "ms": 13589, "persisted": true } }
+```
+
+A healthy tool is untouched by any of this: same call, 4.4s, no re-exploration.
+
+> **Break every recorded handle, not just one.** `replay()`'s `opener()` tries
+> every control handle in `provenance.evidence.controls` *before* `recipe.click`,
+> and `fillField()` falls through selector, placeholder and label. Staling one of
+> them is not drift - replay absorbs it and the tool never goes red. This is also
+> why `heal()` returns fresh `provenance` alongside the recipe: a repair that
+> left the old handles in place sent every retry back to the button the deploy
+> had renamed, so the tool healed on every call and went green on none.
+
 ## Behaviour worth knowing
 
 - **stdout is the JSON-RPC channel.** Every human-readable line goes to stderr.
