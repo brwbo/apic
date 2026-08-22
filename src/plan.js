@@ -115,6 +115,51 @@ const GESTURE_VERB = [
  */
 const OFF_SLICE = /favou?rit|subscrib|duplicat|relation|attachment|reaction|priorit|progress|colou?r|remind|repeat|\bdate\b|filter|\bsort\b|comment|assignee|\buser\b|share|team|\bview\b|import|export|password|token|migrat/i
 
+/** The closed vocabulary. Anything proposing a gesture must land inside it. */
+const VERBS = new Set(GESTURE_VERB.map(([, v]) => v))
+const NOUNS = new Set(RESOURCE.map(([, n]) => n))
+
+/** The vocabulary itself, for a classifier that has to be told what it may say. */
+export const VOCABULARY = { verbs: [...VERBS], nouns: [...NOUNS] }
+
+/** Is this control real, but deliberately outside the board slice? */
+export function offSlice(text) {
+  return OFF_SLICE.test(String(text || ''))
+}
+
+/**
+ * Build a canonical gesture from a <verb, resource> pair that did not come from
+ * the regex vocabulary - h's classifier is the only caller today.
+ *
+ * The membership check is the point: a model asked for a verb will happily
+ * invent one, and an invented verb names an emitted tool. Everything outside
+ * the closed sets is refused here rather than downstream.
+ */
+export function gestureFrom(verb, noun, { scope = null } = {}) {
+  if (!VERBS.has(verb) || !NOUNS.has(noun)) return null
+  return canonicalise(verb, noun, scope)
+}
+
+/**
+ * The rules that turn a raw <verb, resource> pair into the phrase that names a
+ * tool. Shared by both callers so a classified gesture cannot skip them.
+ */
+function canonicalise(verb, noun, scope) {
+  // A bucket is a column on the board, not a resource this slice creates.
+  // The only board gesture involving one is putting a task into it.
+  if (noun === 'bucket') {
+    if (verb !== 'move') return null
+    noun = scope === 'task' ? 'task' : null
+    if (!noun) return null
+  }
+
+  // "ADD LABELS" on a project page creates a label; on a task page it attaches
+  // one to that task. Same words, different write - the page decides.
+  if (verb === 'create' && noun === 'label' && scope === 'task') verb = 'assign'
+
+  return { verb, noun, label: `${verb} ${noun}` }
+}
+
 /** Which board resource a piece of text is about, if any. */
 export function resourceOf(text) {
   const hit = RESOURCE.find(([re]) => re.test(String(text || '')))
@@ -143,20 +188,8 @@ export function gesture(text, { scope = null } = {}) {
   let verb = vhit[1]
 
   const rhit = RESOURCE.find(([re]) => re.test(s))
-  let noun = rhit ? rhit[1] : scope
+  const noun = rhit ? rhit[1] : scope
   if (!noun) return null
 
-  // A bucket is a column on the board, not a resource this slice creates.
-  // The only board gesture involving one is putting a task into it.
-  if (noun === 'bucket') {
-    if (verb !== 'move') return null
-    noun = scope === 'task' ? 'task' : null
-    if (!noun) return null
-  }
-
-  // "ADD LABELS" on a project page creates a label; on a task page it attaches
-  // one to that task. Same words, different write - the page decides.
-  if (verb === 'create' && noun === 'label' && scope === 'task') verb = 'assign'
-
-  return { verb, noun, label: `${verb} ${noun}` }
+  return canonicalise(verb, noun, scope)
 }

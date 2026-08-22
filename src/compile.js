@@ -91,6 +91,7 @@ export async function compile({
       onLog(`  seed ${seed}`)
       const found = await discoverOn(page, `${url}${seed}`, {
         onStep: (s, d) => onLog(step(s) + describe(d).slice(0, 46)),
+        onLog: (m) => onLog(`  \x1b[33m!\x1b[0m ${m}`),
       })
       await settle(found)
     }
@@ -101,6 +102,7 @@ export async function compile({
       onLog(`  seed ${inside} (discovered)`)
       const found = await discoverOn(page, `${url}${inside}`, {
         onStep: (s, d) => onLog(step(s) + describe(d).slice(0, 46)),
+        onLog: (m) => onLog(`  \x1b[33m!\x1b[0m ${m}`),
       })
       await settle(found)
       const inline = await discoverInline(page, `${url}${inside}`, {

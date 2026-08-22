@@ -93,6 +93,84 @@ export async function nextAction(page, { goal, candidates, tried = [] }) {
   return { label, why: String(parsed.why || '').slice(0, 60), done: Boolean(parsed.done) }
 }
 
+/**
+ * Classify the controls the keyless vocabulary refused.
+ *
+ * `gesture()` maps a control's text to a <verb, resource> pair with regexes,
+ * and returns null for everything else. That null is the precision gate and it
+ * is also where recall goes: an icon-only button, a control that does not lead
+ * with a verb ("Done", "Save changes"), or an app that words its buttons in a
+ * way the vocabulary never anticipated is silently dropped, no matter what it
+ * does. A regex cannot look at a page; this can.
+ *
+ * Escalation, not interpretation - the same shape as fal's vision tier. It runs
+ * once per seed, on the leftovers only, and its answers are checked against the
+ * closed vocabulary by plan.gestureFrom() before they can name anything. A
+ * classified control still has to make the app confirm a write like every other
+ * candidate, so a wrong guess costs one probe, not a bogus tool.
+ *
+ * @returns {Promise<Array<{label:string, verb:string, noun:string, why:string}>>}
+ */
+export async function classifyGestures(page, { labels, scope = null, verbs, nouns }) {
+  if (!available() || !labels?.length) return []
+
+  let shot
+  try {
+    shot = (await page.screenshot({ type: 'jpeg', quality: 60, fullPage: false })).toString('base64')
+  } catch { return [] }
+
+  const system = `You are reading a Kanban application to decide which on-screen controls perform a WRITE.
+For each control you are given, answer only if clicking it would create, rename, delete, move, assign or complete something.
+Ignore controls that only navigate, filter, sort, open a menu, or change the view.
+verb must be exactly one of: ${verbs.join(', ')}
+noun must be exactly one of: ${nouns.join(', ')}
+Reply with JSON only: {"gestures": [{"label": "<exact text from the list>", "verb": "<verb>", "noun": "<noun>", "why": "<8 words or fewer>"}]}
+Omit any control you are not confident about. An empty list is a valid and often correct answer.`
+
+  const prompt = [
+    `URL: ${page.url()}`,
+    scope ? `This page is about a ${scope}.` : '',
+    `Controls:\n${labels.map((l) => `- ${l}`).join('\n')}`,
+  ].filter(Boolean).join('\n\n')
+
+  let raw
+  try {
+    const res = await client().chat.completions.create({
+      model: MODEL,
+      temperature: 0.2,
+      max_tokens: 400,
+      messages: [
+        { role: 'system', content: system },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${shot}` } },
+          ],
+        },
+      ],
+    })
+    raw = res.choices?.[0]?.message?.content ?? ''
+  } catch (e) {
+    return { error: e.message?.split('\n')[0] || String(e) }
+  }
+
+  const parsed = parseJson(raw)
+  if (!Array.isArray(parsed?.gestures)) return []
+
+  const out = []
+  for (const g of parsed.gestures) {
+    // The label must be one we asked about. A model asked to quote a list will
+    // sometimes describe the button instead, and a described button matches no
+    // element on the page.
+    const label = labels.find((l) => l === g?.label)
+      || labels.find((l) => l.toLowerCase() === String(g?.label).toLowerCase())
+    if (!label || out.some((o) => o.label === label)) continue
+    out.push({ label, verb: String(g.verb || ''), noun: String(g.noun || ''), why: String(g.why || '').slice(0, 60) })
+  }
+  return out
+}
+
 /** Tolerate fenced or chatty responses around the JSON. */
 function parseJson(text) {
   if (!text) return null
