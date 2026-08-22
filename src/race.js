@@ -20,17 +20,44 @@
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { chromium } from 'playwright'
 import OpenAI from 'openai'
 import { replay } from './replay.js'
-import { openSession, ensure, closeSession } from './session.js'
+import { openSession, ensure, closeSession, isFresh } from './session.js'
 import { config } from './config.js'
 
 const OUT = process.env.APIC_OUT_DIR || 'generated'
 const APP = process.env.APIC_APP || 'vikunja'
 const TOOL = process.env.APIC_RACE_TOOL || 'createTask'
 const MAX_STEPS = Number(process.env.APIC_RACE_MAX_STEPS || 14)
-const SEQUENTIAL = process.argv.includes('--sequential')
 const HEADED = process.argv.includes('--headed')
+
+/**
+ * Sequential by default, and that is a correctness decision, not a timid one.
+ *
+ * Run concurrently against the same board and the two lanes contaminate each
+ * other: the compiled lane verifies by diffing the DOM before and after its own
+ * action, and the pixel lane is adding rows to that same list at the same time.
+ * Measured - 4/4 both lanes sequentially, 2/4 concurrently, failing with
+ * "expected creation, got deletion" on a call that did exactly what it should.
+ * A red lane on camera for a reason that is not real is the worst outcome here.
+ *
+ * --concurrent restores the side-by-side. Give the lanes separate boards when
+ * you use it (APIC_RACE_PIXEL_URL), or you are filming the artifact above.
+ */
+const SEQUENTIAL = !process.argv.includes('--concurrent')
+const PIXEL_URL = process.env.APIC_RACE_PIXEL_URL || null
+
+/**
+ * Window geometry for the filmed frame: two browsers side by side, left one
+ * being clicked by a model, right one mutating with nothing touching it.
+ *
+ * Defaults suit a 1512x982 logical display (a 3024x1964 Retina panel). Override
+ * per-machine rather than editing this - the recording rig is not the product.
+ */
+const [WIN_W, WIN_H] = (process.env.APIC_RACE_WINDOW || '756x900').split('x').map(Number)
+const WIN_Y = Number(process.env.APIC_RACE_WINDOW_Y || 0)
+const WIN_X = Number(process.env.APIC_RACE_WINDOW_X || 0)
 
 const PRICE_IN = Number(process.env.APIC_RACE_PRICE_IN || 0)
 const PRICE_OUT = Number(process.env.APIC_RACE_PRICE_OUT || 0)
@@ -92,6 +119,7 @@ function render(done = false) {
   const rows = []
   rows.push('')
   rows.push(`  ${b('apic race')}  ${dim(`${APP} · ${TOOL} · ${N > 1 ? `${N}x, ` : ''}same action, two ways`)}`)
+  if (!SEQUENTIAL && !PIXEL_URL) rows.push(`  ${y('!')} ${dim('concurrent on one board - lanes will contaminate each other; set APIC_RACE_PIXEL_URL')}`)
   rows.push('')
   rows.push(`  ${pad(b(L.label))}  ${b(R.label)}`)
   rows.push(`  ${pad(dim(L.how))}  ${dim(R.how)}`)
@@ -232,14 +260,24 @@ async function pixelOne(page, p, goal) {
   // makes the comparison worthless - it arrives with the task input already on
   // screen and "finds" it in two steps. Finding the right page is precisely the
   // work the compiled lane no longer has to do, so the baseline has to do it.
-  await page.goto(config.target.url, { waitUntil: 'domcontentloaded' })
+  await page.goto(PIXEL_URL || config.target.url, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(800)
 
   for (let i = 0; i < MAX_STEPS; i++) {
     if (await visible(page, goal)) { note(L, 'goal visible - stopping'); break }
 
     const controls = await affordances(page)
-    const shot = (await page.screenshot({ type: 'jpeg', quality: 55 })).toString('base64')
+
+    // A headed window with viewport:null can hang for the full 30s default in
+    // page.screenshot's "waiting for fonts to load" step. Cap it, and if the
+    // frame never arrives fall back to a text-only prompt rather than losing
+    // the step - a computer-use agent that cannot see is degraded, not dead,
+    // and pretending the step never happened would understate this lane's cost.
+    const shot = await page
+      .screenshot({ type: 'jpeg', quality: 55, timeout: 8000, animations: 'disabled' })
+      .then((buf) => buf.toString('base64'))
+      .catch(() => null)
+    if (!shot) note(L, 'screenshot timed out - text only')
 
     const res = await p.client.chat.completions.create({
       model: p.model,
@@ -251,7 +289,7 @@ async function pixelOne(page, p, goal) {
           role: 'user',
           content: [
             { type: 'text', text: `Goal: create a task called "${goal}".\nURL: ${page.url()}\nControls:\n${controls.map((c) => `- [${c.kind}] ${c.label}`).join('\n')}` },
-            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${shot}` } },
+            ...(shot ? [{ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${shot}` } }] : []),
           ],
         },
       ],
@@ -348,6 +386,31 @@ const seedUrl = () => {
 // -------------------------------------------------------------------- driver
 
 /**
+ * A positioned browser window, in the shape `ensure()` and `replay()` expect.
+ *
+ * Deliberately NOT a change to session.js. openSession has no window-placement
+ * argument, and adding one would put a recording concern into the file every
+ * other stage depends on - and into a file a second session may be editing.
+ * The storageState logic is mirrored, not reimplemented: same file, same
+ * freshness rule, so neither lane spends a login.
+ */
+async function openWindow({ headless, x, y }) {
+  const state = process.env.APIC_SESSION || '.apic/session.json'
+  const browser = await chromium.launch({
+    headless,
+    args: headless ? [] : [`--window-position=${x},${y}`, `--window-size=${WIN_W},${WIN_H}`],
+  })
+  const context = await browser.newContext({
+    // A headed window should fill itself; a fixed viewport leaves grey bars
+    // down the side of the shot.
+    viewport: headless ? { width: 1440, height: 900 } : null,
+    storageState: isFresh(state) ? state : undefined,
+  })
+  const page = await context.newPage()
+  return { browser, context, page, state, authed: false }
+}
+
+/**
  * Authenticate ONCE before either lane opens a browser. Vikunja rate limits
  * the login route, so two lanes racing to log in is a self-inflicted failure
  * that looks exactly like the app being slow - which would flatter the wrong
@@ -366,8 +429,22 @@ try {
   render()
   await warm()
 
-  a = await openSession({ headless: !HEADED })
-  c = await openSession({ headless: true })
+  // Both lanes visible when filming. The right-hand window is the shot: the
+  // board fills with nobody driving it, no cursor, no page being read.
+  a = await openWindow({ headless: !HEADED, x: WIN_X, y: WIN_Y })
+  c = await openWindow({ headless: !HEADED, x: WIN_X + WIN_W, y: WIN_Y })
+
+  // Compose the frame before anything starts moving. Both windows show their
+  // starting page, the counters read zero, and the viewer gets a beat to see
+  // that the right-hand board is empty. Done outside the lanes so it lands
+  // before t0 and costs neither side a millisecond of the measurement.
+  if (HEADED) {
+    await Promise.all([
+      a.page.goto(PIXEL_URL || config.target.url, { waitUntil: 'domcontentloaded' }).catch(() => {}),
+      c.page.goto(seedUrl(), { waitUntil: 'domcontentloaded' }).catch(() => {}),
+    ])
+    await new Promise((res) => setTimeout(res, Number(process.env.APIC_RACE_HOLD_MS || 2500)))
+  }
 
   const left = () => pixelLane(a, goalsFor('pixel')).catch((e) => {
     L.state = 'done'; L.ok = false; L.ms = Date.now() - (L.t0 || Date.now()); L.error = e.message
