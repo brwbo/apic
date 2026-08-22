@@ -23,6 +23,10 @@ export const config = {
   target: {
     url:  process.env.TARGET_URL  || 'http://localhost:3456',
     user: process.env.TARGET_USER || 'apic',
+    // Some apps put the login form on a page that is not named /login -
+    // ParaBank's is on index.htm. Tried first, before the standard paths.
+    loginPath: process.env.TARGET_LOGIN_PATH || null,
+    probePath: process.env.TARGET_PROBE_PATH || '/',
     pass: process.env.TARGET_PASS || 'apicdemo2026',
   },
   keys: {

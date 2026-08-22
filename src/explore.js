@@ -38,6 +38,25 @@ const LOGIN_PATHS = ['/login', '/user/login', '/signin', '/auth/login', '/users/
 const AUTH_PATH = /login|signin|sign_in|auth/i
 const SUBMIT_TEXT = /sign ?in|log ?in|continue|submit/i
 
+/**
+ * Being logged in is a fact about the page, not about the URL.
+ *
+ * Vikunja redirects logged-out users to /login. Gitea serves a landing page at
+ * / with a Sign In link. ParaBank puts the login form on index.htm and stays
+ * there on success. Only one test covers all three: is there still a password
+ * field or a sign-in affordance in front of me?
+ */
+async function signedIn(page) {
+  return page.evaluate(() => {
+    const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 }
+    if ([...document.querySelectorAll('input[type="password"]')].some(visible)) return false
+    const prompts = [...document.querySelectorAll('a, button')]
+      .filter(visible)
+      .some((el) => /^\s*(sign ?in|log ?in|register)\s*$/i.test((el.innerText || '').trim()))
+    return !prompts
+  }).catch(() => false)
+}
+
 async function findLoginForm(page) {
   const pw = page.locator('input[type="password"]:visible').first()
   if (!(await pw.count())) return null
@@ -63,7 +82,7 @@ export async function login(page, target = config.target) {
     // A valid stored session redirects the login route away. Filling a form
     // that is not there burns the full Playwright timeout and reads as a
     // broken target - the false failure the session cache exists to prevent.
-    if (!AUTH_PATH.test(new URL(page.url()).pathname)) return page.url()
+    if (!AUTH_PATH.test(new URL(page.url()).pathname) && (await signedIn(page))) return page.url()
 
     form = await findLoginForm(page)
     if (form) { landedOn = path; break }
@@ -79,9 +98,13 @@ export async function login(page, target = config.target) {
     await form.submit.click({ timeout: 4000 }).catch(() => {})
 
     // Client-side routing means there is no navigation lifecycle to wait on.
-    const landed = await page
-      .waitForFunction(() => !/login|signin/i.test(location.pathname), null, { timeout: 6000, polling: 150 })
-      .then(() => true).catch(() => false)
+    // Wait for the login form to go away, not for the URL to change - ParaBank
+    // logs you in and stays on the same page.
+    let landed = false
+    for (let waited = 0; waited < 8000; waited += 400) {
+      await page.waitForTimeout(400)
+      if (await signedIn(page)) { landed = true; break }
+    }
     if (landed) return page.url()
 
     // Retrying into a rate limiter only deepens the hole - fail loudly instead.
