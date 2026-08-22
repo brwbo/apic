@@ -1,114 +1,170 @@
 # apic
 
-**Point it at a running web app. It explores the UI once, verifies what it
-found, and emits a typed MCP server for an app that never had an API.**
+**An app-to-API compiler.** Point it at a web app that has no API for agents. A
+computer-use agent explores the UI, verifies what it found by executing it, and
+emits a typed MCP server for the app.
 
-```
-$ npm run compile
+> Playwright MCP *interprets* the app on every call. apic *compiles* it once.
 
-  apic compile -> http://localhost:3456
-
-  seed /projects
-    * create project             [2p] creation - confirmed: "Success The project was…"
-  seed /labels
-    * create label               [1p] creation - confirmed: "Success The label was su…"
-  seed /projects/21/85 (discovered)
-    + create task (inline)       [1p] creation - confirmed: "apic probe 31953"
-
-  5 candidate actions (5 with parameters)
-  persistence: 2/2 survived a reload
-  4 tools synthesised -> generated/vikunja/
-```
-
-Those tools are then callable with no model in the loop — a `fill`, a `click`
-and a diff, ~4 seconds — and they keep working when the app moves, because the
-compiler repairs them by re-running the build.
+Built solo in one day at the [{Tech: Europe} × VEED Hackathon](https://techeurope.notion.site/techeuropexveed),
+London, 22 August 2026.
 
 ---
 
-## The argument
+## Demo
 
-**Playwright MCP interprets the app on every call. apic compiles it once.**
+_2-minute walkthrough: **TODO — Loom link**_
 
-| compiler | apic |
-|---|---|
-| parse | agent explores the UI |
-| IR | discovered affordances + preconditions |
-| emit | typed MCP server |
-| test suite | agent-verified tool calls |
-| recompile on source change | self-heal when the UI moves |
+## The problem
 
-Computer-use agents do not scale economically: every run re-derives the same
-knowledge from pixels, paying model cost and latency per step, with reliability
-compounding downward over a chain. That is why they are demoed constantly and
-deployed rarely. The honest name for the market is RPA, and its universal
-complaint is brittleness and maintenance cost.
+Computer-use agents don't scale economically. Every run re-derives the same
+knowledge from pixels: a model round-trip per step, a page snapshot per step
+filling the context window, and reliability that compounds downward over a
+chain. Which is why they're demoed constantly and deployed rarely.
 
-apic is the amortisation. First contact with an app is exactly as slow as
-before; every subsequent encounter is a function call.
+The software agents most need to drive is exactly the software least likely to
+ever ship an API — internal tools, legacy systems, anything whose vendor is
+gone. You can't sniff a network tab that has nothing on it, and you can't ask a
+2011 line-of-business app to adopt a new protocol.
 
----
+apic uses the expensive agent **once**, to write the interface. After that it's
+a function call.
+
+## How it works
+
+| Stage | Does | Tech |
+|---|---|---|
+| **Explore** | Drives the app, ranks affordances so create actions go first, opens forms and submits them | Playwright (h integrated, [not reached](#what-doesnt-work-yet)) |
+| **Perceive** | Decides whether anything meaningful changed | DOM diff, escalating to fal on the CLI path |
+| **Synthesise** | Turns a trajectory into a typed tool schema | deterministic — no model call |
+| **Verify** | Replays the tool cold with arguments the app has never seen | keyless judge + OpenAI |
+| **Emit** | Writes a runnable MCP server, its schemas, and its evidence | — |
+| **Watch** | Re-runs the suite on an interval | — |
+| **Heal** | A red tool re-enters discovery at its own seed | — |
+
+**The repair path is the build path.** Healing doesn't patch a selector — it
+re-runs the discovery that found the tool in the first place and matches by the
+name synthesis produces. A renamed button still yields `createProject`.
+
+### A tool exists only if the app confirmed the write
+
+Counting DOM nodes produces a plausible-looking tool for every button on the
+page. apic emits one only when the app itself asserts that state changed, via
+three signals covering three different app behaviours:
+
+| Behaviour | Example | Signal |
+|---|---|---|
+| announce-and-stay | create a label | success banner in a status region |
+| announce-and-navigate | create a project | banner survives the URL change |
+| silent-append | kanban quick-add | the submitted value appears as rendered content |
+| relocation | drag a card between columns | the card changed container |
+
+Relocation matters because a drag has no banner and echoes nothing — the card
+already existed. Containment change *is* the evidence, and no cosmetic
+re-render can produce it.
+
+### Recipes bind to identity, not location
+
+Vikunja regenerates element ids on every page load, so a stored selector is dead
+on arrival. A recipe records what a field **is** — its label, placeholder, name —
+and replay re-resolves it live, falling back to a stable-first selector chain
+(`name` → stable id → placeholder → generated id last).
+
+## Results
+
+Compiled from the UI. **The target's OpenAPI spec is never read during
+compilation** — it's used only as ground truth for scoring, which is why the
+recall number means something.
+
+```
+RECALL     8/18    board write-ops discovered
+PRECISION  9/9     emitted tools that are real
+VERIFIED   8/9     survived a cold replay with unseen arguments
+```
+
+Nine tools discovered, eight served. `markTask` is rejected and kept in
+`tools.json` with `verified: false` — **a rejected tool is evidence about the
+compiler, not garbage.** Marking a task done produces no banner and echoes no
+argument, so nothing confirms the write, and an unconfirmed tool is not served.
+
+Continuous verification over a live afternoon:
+
+```
+58 checks · 22 breaks · 1 automatic repair · MTTR 21s
+```
+
+Read that break count sceptically: it predates a bug in `heal()`, which
+returned a repaired recipe without the fresh `provenance` that `replay()`'s
+opener actually clicks by. A tool whose control had been renamed therefore
+healed on every cycle and went green on none. Fixed; the counters have not been
+re-gathered over a comparable window.
+
+## Partner technologies
+
+Each one has a stage, and each degrades rather than blocking: the whole
+pipeline runs with **no API keys at all**, at reduced fidelity. That property
+is why the compiler was buildable before any credentials arrived — and it is
+also why an integration can stop contributing without the compile noticing,
+which is what the status column records.
+
+| Tech | Stage | Why it earns its place | Status |
+|---|---|---|---|
+| **OpenAI** | Verify | An independent verdict on whether the predicted effect occurred, layered on the keyless diff floor. It can uphold a rejection, never overturn one | **in use** — it ruled on the one tool `verify` rejected |
+| **fal** | Perceive | Fast VLM for meaningful-vs-cosmetic judgement, escalated to only when the DOM diff is ambiguous | **CLI path only** — `adjudicate()` is called from `cli.js`, not `compile.js`, so a compile driven through the MCP server never escalates |
+| **Pioneer** | Distil | Small classifier over the diff text — state change, destructiveness, domain nouns. One batched call per compile | **blocked** — `403 payment_method_required`; perception falls back to the heuristic |
+| **h** | Explore | Computer-use model choosing the next gesture from a screenshot. Playwright is the keyless fallback | **not reached** — `plan.js` exports `nextLabel()` and nothing calls it |
+| **Tavily** | Ground | App documentation → domain vocabulary, so tools are named `createIssue`, not `btn_submit_2` | **not built** — declared in `config.js` and `doctor.js`, never implemented |
+
+**So the results below were produced keyless**, with an OpenAI judge on the
+verify pass. They are the deterministic pipeline's numbers, not a demonstration
+of the partner stack.
+
+The two-tier split is the product's own thesis applied to itself: **fal is the
+cheap high-frequency perception layer, OpenAI is the expensive low-frequency
+reasoning layer.** Escalate on failure, not on every call.
 
 ## Setup
 
-**Requires** Node (developed on v24.15.0), Docker, and a browser Playwright can
-drive (`npx playwright install chromium`).
-
 ```bash
 git clone https://github.com/brwbo/apic && cd apic
-npm run setup
+npm install && npx playwright install chromium
+cp .env.example .env      # fill in keys; .env is gitignored
+npm run setup             # starts the target app, checks every credential
 ```
 
-`scripts/setup.sh` copies `.env.example` to `.env`, starts the target
-containers if they already exist, installs dependencies, and runs the doctor.
-Create the target first if you have not (below).
-
-**The target app.** The demo target is [Vikunja](https://vikunja.io) on
-`localhost:3456` — a kanban app with no MCP server. It is a target, not a
-dependency: `TARGET_URL`, `TARGET_USER` and `TARGET_PASS` in `.env` point apic
-at anything you can log into.
+Target app (self-hosted, disposable — never point this at a third party's
+product):
 
 ```bash
-docker run -d --name vikunja -p 3456:3456 \
+docker volume create vikunja-files
+docker run --rm -v vikunja-files:/data alpine sh -c "chown -R 1000:0 /data"
+docker run -d --name vikunja -p 3456:3456 -v vikunja-files:/app/vikunja/files \
   -e VIKUNJA_SERVICE_PUBLICURL=http://localhost:3456 \
+  -e VIKUNJA_DATABASE_PATH=/app/vikunja/files/vikunja.db \
   -e VIKUNJA_RATELIMIT_ENABLED=false \
-  vikunja/vikunja
+  vikunja/vikunja:latest
 ```
 
-Disabling the rate limiter matters: Vikunja throttles the login route, and a
-throttled login surfaces downstream as every tool failing at once — which is
-indistinguishable from total drift, the one false positive a drift detector
-must never emit.
+| Command | Does |
+|---|---|
+| `npm run doctor` | Which credentials work, which targets are up |
+| `npm run compile` | Explore → synthesise → emit |
+| `npm run verify` | Replay every tool cold; only survivors are served |
+| `npm run watch` | Continuous verification with automatic repair |
+| `npm run score` | Recall and precision against the target's real API |
+| `npm run serve` | Run **apic itself** as an MCP server — see below |
 
-**Keys are optional.** Every model-backed stage degrades to a deterministic
-fallback, and a compile with an empty `.env` still works — that is how the
-pipeline was built before any credentials arrived. `npm run doctor` reports
-which stages are live.
+Seeds and target are environment-driven — nothing in the compiler knows
+Vikunja's routes:
 
 ```bash
-# .env - gitignored, never committed
-OPENAI_API_KEY=      # verify: the second-opinion judge          - in use
-PIONEER_API_KEY=     # distill: change classification            - in use, billing-blocked
-FAL_KEY=             # perceive: the vision escalation tier      - CLI compile only
-HAI_API_KEY=         # explore: h picks the next gesture         - NOT REACHED, see below
+APIC_APP=gitea TARGET_URL=http://localhost:3001 APIC_SEEDS=/repo/create,/issues npm run compile
 ```
 
-Read [What is not true](#what-is-not-true) before believing that list. Three
-of those four are not doing what a reader would assume.
+## Generated output
 
-## Commands
-
-| command | what it does |
-|---|---|
-| `npm run doctor` | which keys are present, which stages are live, which endpoints answer |
-| `npm run compile` | explore the target and emit `generated/<app>/` |
-| `npm run verify` | replay every emitted tool cold; keep only what passes |
-| `npm run score` | recall + precision against the target's own OpenAPI spec |
-| `npm run watch` | re-run the suite on an interval, heal what breaks, print a status table |
-| `npm run serve` | run apic itself as an MCP server (see below) |
-| `npm test` | unit tests, no browser, no keys |
-
-Add `--headed` to `compile` or `verify` to watch it drive.
+[`generated/vikunja/`](generated/vikunja) — server, schemas, and the evidence
+for each tool. **Nothing in that directory was written by a human.**
 
 ## Use it as an MCP server
 
@@ -116,10 +172,10 @@ Add `--headed` to `compile` or `verify` to watch it drive.
 claude mcp add apic -- node /path/to/apic/src/server.js
 ```
 
-The server starts with **one** tool, `compile_app`. Point it at a URL and it
-runs the pipeline in-process, emits `generated/<app>/`, registers the compiled
-tools **on itself**, and sends `notifications/tools/list_changed` — so they are
-callable on the same connection, no restart. Verified from a cold start:
+`src/server.js` starts with **one** tool, `compile_app`. Point it at a URL and
+it runs the pipeline in-process, emits `generated/<app>/`, registers the
+compiled tools **on itself**, and sends `notifications/tools/list_changed` — so
+they are callable on the same connection, with no restart. From a cold start:
 
 ```
 [apic] ready - 0 compiled tools + compile_app
@@ -130,15 +186,16 @@ AFTER compile = [compile_app, createProject, createLabel, updateLabel, createTas
 createLabel -> {"ok":true,"effect":"creation","expected":"creation"}
 ```
 
-Full transcripts and the client-compatibility notes are in
-[docs/mcp-client.md](docs/mcp-client.md).
+A compiler that needs you to restart the thing it just extended is a build
+step. One that doesn't is a live compiler. Client-compatibility notes and full
+transcripts: [docs/mcp-client.md](docs/mcp-client.md).
 
 ### Both dead ends are answered, not reported
 
-A client only meets apic at the moment something is missing.
+A client only meets apic at the moment something is missing, and both of those
+moments used to end the conversation.
 
-**A tool that does not exist** returns the compile that would create it, rather
-than a bare `unknown tool`:
+**A tool that does not exist** returns the compile that would create it:
 
 ```
 unknown tool: createIssue
@@ -148,9 +205,11 @@ No compiled tool exposes that action (compiled so far: vikunja). If the app has 
     compile_app { "url": "http://localhost:3456", "goal": "createIssue" }
 ```
 
-**A tool the app has moved out from under** is repaired on the call path. The
-tool goes red, the compiler re-explores that one action, the repair is written
-back to disk, and the call is retried before the caller sees a failure:
+**A tool the app has moved out from under** is repaired on the call path —
+`watch` heals on a timer, the server heals on demand, through the same
+`heal()`. The tool goes red, the compiler re-explores that one action, the
+repair is written back to `tools.json`, and the call is retried before the
+caller sees a failure:
 
 ```
 [apic] createLabel is red (no control matched "ADD LABEL (RENAMED)") - re-exploring to heal it
@@ -158,160 +217,60 @@ back to disk, and the call is retried before the caller sees a failure:
 { "ok": true, "effect": "creation", "healed": { "ms": 13589, "persisted": true } }
 ```
 
-A healthy tool is untouched by any of this: 4.4s, no re-exploration.
+A healthy tool is untouched by any of this: same call, 4.4s, no re-exploration.
 
----
+## Related work, and how this differs
 
-## How it works
-
-| stage | file | what it does |
+| Project | What it does | The difference |
 |---|---|---|
-| explore | [`explore.js`](src/explore.js), [`discover.js`](src/discover.js) | drives a real browser, scopes affordances to main content, ranks them, tries the write-shaped ones |
-| plan | [`plan.js`](src/plan.js) | ranks candidates and filters them through a board gesture model — keyless. [`h.js`](src/h.js) is the model-backed planner behind the same seam, and is **not currently reached** |
-| perceive | [`perceive.js`](src/perceive.js) | DOM snapshot and diff before/after; escalates to a VLM only for changes the text cannot settle |
-| distill | [`distill.js`](src/distill.js) | classifies each change (kind, destructive) and extracts domain nouns from the diff text |
-| persist | [`persist.js`](src/persist.js) | reloads and looks for what was submitted — a displayed value is not a stored one |
-| synthesize | [`synthesize.js`](src/synthesize.js) | trajectory + observed change -> typed tool schema, deterministic |
-| emit | [`emit.js`](src/emit.js) | writes `generated/<app>/`: `tools.json`, a runnable `server.js`, a README with per-tool evidence |
-| verify | [`verify.js`](src/verify.js) | replays every tool cold with fresh arguments; a deterministic diff floor, with an OpenAI judge as a stricter second opinion |
-| heal | [`heal.js`](src/heal.js) | re-runs discovery at the tool's own seed and swaps in the fresh recipe |
-| watch | [`watch.js`](src/watch.js) | the suite on an interval, healing what breaks |
-| score | [`score.js`](src/score.js) | recall + precision against the target's own OpenAPI spec |
-| serve | [`server.js`](src/server.js) | apic as a live MCP server |
+| [Playwright MCP](https://playwright.dev/mcp/introduction) | Browser automation as typed MCP tools | Generic verbs (`click(ref)`) vs app-specific nouns (`createTask(title)`). Runtime vs compile time |
+| [Apify MCP Server](https://github.com/apify/apify-mcp-server) | Auto-generates typed tools from Actor input schemas | Actors are human-authored — it generates the *wrapper* from a human-written contract |
+| [Apify AI Web Scraper](https://apify.com/apify/ai-web-scraper) | URL + plain English → structured data | Returns data, not an interface, and re-runs the LLM every call |
+| [cli-printing-press](https://github.com/mvanhorn/cli-printing-press) | URL/HAR/OpenAPI → CLI + MCP server, with verification gates | Sniffs network traffic — the app must already have an API. apic drives the UI |
+| [Easy MCP](https://techcommunity.microsoft.com/blog/appsonazureblog/app-service-easy-mcp-add-ai-agent-capabilities-to-your-existing-apps-with-zero-c/4484513) | OpenAPI spec → MCP tools | Requires the API to already exist |
+| [Alita](https://huggingface.co/papers/2505.20286) | Agent generates and reuses MCPs per task | Generates tools by searching the web. apic derives them by operating the software |
+| [WebMCP](https://github.com/webmachinelearning/webmcp) | Pages declare their own tools in JavaScript | Requires the app's developers to adopt it |
+| [Voyager](https://llm-agent-tutorial.github.io/website/voyager.html) | Write a skill, verify it, store it, reuse it | The ancestor of the verify-then-keep loop |
 
-**Three things make the output trustworthy rather than plausible.**
+**The loop is not novel — where the capability comes from is.** Alita reads the
+internet to make tools; cli-printing-press reads the network; Easy MCP reads a
+spec. apic reads the app.
 
-*Confirmation gates synthesis.* An action becomes a tool only when the app said
-so — a success banner, or the submitted value echoed back somewhere it was not
-typed. A click that changed pixels and nothing else is not a write.
+## What doesn't work yet
 
-*Persistence is checked by reload.* A value the SPA rendered optimistically and
-a value the server stored look identical until you reload. `persist.js`
-reloads.
+Stated plainly, because a compiler that hides its failure modes isn't one.
 
-*Verification replays cold.* `verify.js` calls every emitted tool again, from a
-fresh session with fresh arguments, and drops the ones that cannot reproduce
-their own effect. That is what `rejected` in `tools.json` records — with the
-reason, in English.
-
-**The repair path is the build path.** Healing does not patch a selector; it
-re-runs discovery at that tool's seed and takes whatever the compiler finds
-now. A renamed button still yields `createLabel`. This is the difference
-between a compiler and a scraper.
-
----
-
-## Results
-
-Ground truth is Vikunja's own OpenAPI spec — **which apic never reads while
-compiling.** The compiler only ever sees the UI. `score.js` extracts the 18
-write operations in the board slice and scores what was emitted against them.
-
-```
-$ npm run score
-  ground truth: 18 write ops in the board slice
-  RECALL    8/18   (actions apic found)
-  PRECISION 8/8    (emitted tools that are real)
-```
-
-**Started at 2/18 with precision 2/18. Finished at 8/18 with precision 8/8.**
-Every change and what it bought is logged in
-[docs/recall-log.md](docs/recall-log.md) — including the six ops still missed
-and why each one is missed.
-
-`verify.js` rejected one tool of nine: `markTask` observed a mutation but
-nothing confirmed a write. The rejection and its reason stay in `tools.json`.
-
-## What is not true
-
-This section is the honest ledger. Everything above is reproducible; the
-following is what a reader would reasonably assume and should not.
-
-- **h is not reached.** `plan.js` exposes `nextLabel()` — the seam where h's
-  Holo model chooses the next gesture from a screenshot — and **nothing calls
-  it.** `discover.js` walks affordances and filters them through the keyless
-  `gesture()` model instead. `HAI_API_KEY` passes the doctor's live check and
-  then contributes nothing to a compile.
-- **Tavily is not wired.** The `ground` stage — public docs -> domain
-  vocabulary — is declared in `config.js` and reported by `doctor.js`, and was
-  never built.
-- **fal runs on the CLI path only.** `adjudicate()` is called from
-  [`cli.js`](src/cli.js), not from [`compile.js`](src/compile.js) — so a
-  compile driven through the MCP server captures frames and never escalates to
-  the vision tier. It is an escalation tier either way: it fires only for steps
-  the DOM text could not settle, which on Vikunja is most often none of them.
-- **Pioneer is billing-blocked.** The integration is live in both paths, and
-  currently returns `HTTP 403 payment_method_required`, so every compile falls
-  back to the node-count heuristic. That is why the emitted tools all record
-  `"discoveredBy": "heuristic"`.
-- **So the numbers below were produced keyless.** Recall 8/18 at 100% precision
-  is the deterministic pipeline's score, with an OpenAI judge on the verify
-  pass. It is not a demonstration of the partner stack.
-- **One app is proven.** `generated/gitea/` compiled to **zero** tools. Vikunja
-  works; generalisation is unproven.
+- **Three partner integrations are not contributing.** `h` is wired and never
+  called; `fal` escalation runs on the CLI path but not through `compile_app`;
+  Pioneer returns 403. Each was written to degrade silently, and each did — the
+  compiles that produced the numbers above ran keyless. The degradation is the
+  intended behaviour; not noticing for a whole afternoon is not.
+- **Only one app has been compiled end to end.** A second target (Gitea)
+  authenticates through the same discovered login with no configuration, but
+  discovery returns zero candidates there. Unresolved.
+- **8/18 recall.** Missing: bucket creation, comments, relations and attachments.
+- **`markTask` fails verification.** The effect is observed and correct, but
+  toggling a checkbox produces no banner and echoes no argument, so nothing
+  independently confirms the write. It stays rejected rather than served.
 - **Watch treats every failure as drift.** Real flake-vs-drift classification
-  does not exist. The counters in `out/watch-stats.json` were recorded before
-  the provenance fix in `heal()` and their break/repair ratio reflects that bug,
-  not the current behaviour.
-- **The emitted per-app `server.js` is the plain version** — it replays tools
-  and reports failures. Healing on the call path lives in `src/server.js`, the
-  live compiler server.
-- **A compile takes minutes** — it drives a real browser. Clients with a short
-  tool-call timeout need it raised.
+  doesn't exist. Three false-positive classes were fixed by hand — rate
+  limiting, token expiry, and a crashed page — but the general problem stands.
+- **Semantic change is undetected and dangerous.** If `deleteProject` starts
+  archiving instead of deleting, healing the selector is the *wrong* answer.
+  Verification checks that an effect occurred, not that it's the same effect.
+- **No inverse actions**, so the suite pollutes its own fixture. Repeated runs
+  degrade the target until it's reset.
+- **Auth is sidestepped.** One login, one user, no permission scopes — which is
+  the hard part of the problem in real enterprise software.
+- **Pioneer is blocked** on an account credits error, so the SLM classifier is
+  idle and perception falls back to the heuristic.
 
-## Partner technologies
+## Prior work declaration
 
-| tech | stage | what it does | status |
-|---|---|---|---|
-| **OpenAI** | verify | structured-output judge over the replay diff, layered on the deterministic floor. It can uphold a rejection, never overturn one | **in use** — it weighed in on the one tool `verify` rejected |
-| **Pioneer** | distill | GLiNER2 encoder over the diff text — classifies state change and destructiveness, extracts domain nouns. One batched call per compile | **integrated, blocked** — `403 payment_method_required`, falls back to the heuristic |
-| **fal** | perceive | VLM over before/after frames, for changes the DOM text cannot settle — a card that moved column, a control that merely lit up | **CLI path only**, and only for steps text could not settle |
-| **h** | explore | `holo3-1-35b-a3b` reads a screenshot and the candidate list and picks the next gesture to try | **integrated, not reached** — `nextLabel()` has no callers |
+Written from scratch at the hackathon. No boilerplate carried in; the repo was
+created empty on the morning of the event. Playwright, the MCP SDK, and the
+OpenAI and fal clients are the only dependencies.
 
-Every one of them degrades rather than fails: no key, a dead endpoint or an
-unparseable answer leaves the deterministic classification standing. A blind
-judge must never fail a compile. That property is why the pipeline was
-buildable before any credentials arrived — and it is also why three of these
-four could stop contributing without the compile noticing, which is exactly
-what happened.
+## Licence
 
-The intended economy: `fal` as the cheap high-frequency perception layer,
-OpenAI as the expensive low-frequency reasoning layer — the same
-escalate-on-failure-not-on-every-call principle the product is built on. Only
-half of that is wired today.
-
-## Related work
-
-- **[Playwright MCP](https://playwright.dev/mcp/introduction)** — the nearest
-  thing. Generic verbs (`click(ref)`) against app-specific nouns
-  (`createTask(title)`); runtime against compile time.
-- **[Apify MCP Server](https://github.com/apify/apify-mcp-server)** —
-  auto-generates typed per-app tools, from human-authored Actor input schemas.
-  apic derives the contract by operating the software.
-- **Easy MCP** (Microsoft) — OpenAPI spec to MCP tools. Requires the API to
-  already exist.
-- **[WebMCP](https://github.com/webmachinelearning/webmcp)** — pages declare
-  their own tools. Requires the page's author to cooperate; apic's wedge is
-  software whose authors will not.
-- **Alita** (arXiv 2505.20286) and **Alita-G** (arXiv 2510.23601) — agents that
-  generate and reuse MCPs per task. Closest published framing. Alita synthesises
-  tools from what it *reads*; apic derives them from what it *does*.
-- **[AgentDistill](https://arxiv.org/pdf/2506.14728)** — training-free agent
-  distillation with generalizable MCP boxes.
-- **Voyager**, CREATOR, LLMs as Tool Makers — the ancestors of the
-  write-verify-keep loop.
-- **[healwright](https://libraries.io/npm/healwright)** — self-healing
-  selectors. Heals hand-written tests; apic heals a generated API.
-
-## Layout
-
-```
-src/           the compiler
-generated/     compiled apps - tools.json, a runnable server.js, evidence
-docs/          recall log, MCP client notes
-tests/         unit tests, no browser
-scripts/       setup
-out/           scratch: trajectories, raw model output, watch stats (gitignored)
-```
-
-MIT.
+MIT
