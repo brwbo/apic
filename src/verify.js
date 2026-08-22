@@ -2,17 +2,14 @@
  * verify.js - a synthesised tool is a claim; executing it is the proof.
  *
  * synthesize.js emits a tool because the app announced a write once, during
- * exploration, with values the explorer chose. That is one observation on one
- * page state. Verification replays the recipe cold, with arguments the app has
- * never seen, and asks whether the effect the tool predicts is the effect that
- * actually happened. Tools that fail stay in tools.json marked verified:false -
- * a rejected tool is evidence about the compiler, not garbage - but only the
- * survivors are emitted into the server.
+ * exploration, with values the explorer chose - one observation on one page
+ * state. Verification replays the recipe cold, with arguments the app has never
+ * seen, and asks whether the predicted effect is the effect that happened.
+ * Failures stay marked verified:false - a rejected tool is evidence about the
+ * compiler, not garbage - but only survivors reach the server.
  *
- * Two judges behind one interface, mirroring perceive.js:
- *   model   - OpenAI structured output. Reads the diff and rules on it.
- *   diff    - keyless. `expected === observed && every argument landed`.
- * The keyless rung must keep working; it is the one the demo can always run.
+ * Two judges, mirroring perceive.js: a keyless diff judge that must always work,
+ * and OpenAI structured output layered on top as a stricter second opinion.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -22,21 +19,17 @@ import { replay } from './replay.js'
 import { emit } from './emit.js'
 import { openSession, ensure, closeSession } from './session.js'
 
-// Vikunja rate limits, and a verifier that trips the limit invents failures
-// that look exactly like UI drift - the precise signal this stage exists to
-// produce honestly. Pace the replays; a slow verify is worth a truthful one.
-const PACE_MS = Number(process.env.APIC_VERIFY_PACE_MS || 1500)
+// Vikunja rate limits, and replay.js gives the page 500ms to settle - a budget
+// that fails once the target accumulates rows, which verifying is what does.
+// Both invent failures indistinguishable from drift, so warm the route first.
+const PACE_MS = Number(process.env.APIC_VERIFY_PACE_MS || 2500)
 const OUT_DIR = process.env.APIC_OUT_DIR || 'generated'
 const APP = process.env.APIC_APP || 'vikunja'
-// config.js owns model choice; until it carries an openai block this reads the
-// env directly rather than hard-coding a model name in two places.
+// config.js owns model choice; until it carries an openai block, read the env.
 const MODEL = config.openai?.model || process.env.OPENAI_MODEL || 'gpt-4.1-mini'
 
-/**
- * Fresh arguments on every run. A tool that "passes" because the row it created
- * last time is still on the page has proved nothing, so every string carries a
- * token unique to this run and this tool.
- */
+/** Fresh arguments every run: a tool that "passes" because the row it created
+ *  last time is still on the page has proved nothing. */
 function exampleArgs(tool, token) {
   const { properties = {} } = tool.inputSchema || {}
   const args = {}
@@ -52,26 +45,26 @@ const VERDICT = {
   type: 'object',
   properties: {
     verified: { type: 'boolean', description: 'True only if the predicted effect demonstrably occurred.' },
-    reason: { type: 'string', description: 'One sentence citing the specific evidence that decided it.' },
+    reason: { type: 'string', description: 'One sentence citing the evidence that decided it.' },
   },
-  required: ['verified', 'reason'],
-  additionalProperties: false,
+  required: ['verified', 'reason'], additionalProperties: false,
 }
 
-const SYSTEM = `You audit tools that were compiled by exploring a web app's UI, not by reading its API.
-A tool was replayed against the live app with arguments it had never seen. You are given what the
-tool predicted would happen and the DOM diff of what did happen.
-Rule verified:true only if the predicted effect demonstrably occurred - typically the submitted
-argument value appearing in the added DOM nodes, or the app's own success announcement.
-Rule verified:false if nothing changed, if the change is a different kind of effect, if the diff is
-only navigation or re-render, or if any argument failed to reach a field. A page that changed is not
-a write that happened. Prefer false when the evidence is ambiguous.`
+const SYSTEM = `You audit tools compiled by exploring a web app's UI, not by reading its API. A tool
+was replayed live with arguments it had never seen. You get what it predicted and the DOM diff of
+what happened. Rule verified:true only on the app's own success announcement (a status or alert
+node), or the submitted value appearing in a node that is NOT the control it was typed into - a
+filter or search box redisplaying your text is the field showing its own value, not a write.
+Rule verified:false if nothing changed, if any argument never reached a field, or if the only
+evidence is nodes appearing. A page that changed is not a write that happened. Prefer false when
+the evidence is ambiguous.`
 
 /** OpenAI judge. Reads the diff and rules on it. */
 async function judgeModel(tool, args, result) {
   const client = new OpenAI({ apiKey: config.keys.openai, timeout: 30000 })
   const res = await client.chat.completions.create({
     model: MODEL,
+    temperature: 0,
     response_format: { type: 'json_schema', json_schema: { name: 'verdict', strict: true, schema: VERDICT } },
     messages: [
       { role: 'system', content: SYSTEM },
@@ -86,7 +79,8 @@ async function judgeModel(tool, args, result) {
           observed: {
             effect: result.effect,
             anythingChanged: result.ok || result.effect !== undefined,
-            addedDomNodes: result.added || [],
+            addedDomNodes: (result.added || []).filter((a) => !SELF.test(a)),
+            addedNodesThatAreJustTheInputShowingItsOwnValue: (result.added || []).filter((a) => SELF.test(a)),
             argumentsThatNeverReachedAField: result.unfilled || [],
             replayError: result.error,
           },
@@ -99,23 +93,33 @@ async function judgeModel(tool, args, result) {
 }
 
 /**
- * Keyless judge. Deliberately strict: the recipe predicted an effect, so the
- * observed effect must match it and every argument must have landed. Submitting
- * a form without setting its arguments is the failure that looks like success.
+ * Keyless judge, in evidence order. Announcement, then echo - never the effect
+ * label alone. Echo is recomputed here because replay.js calls diff(before,
+ * after) without the submitted value, leaving perceive.js's echoed() unreachable
+ * at replay time: a creation that navigates comes back classified `navigation`
+ * and would fail on effect equality despite having happened.
  */
+const SUCCESS = /\b(success|successfully|created|saved|added|updated|deleted|removed)\b/i
+// An echo inside the control we typed into is the field showing its own value.
+const SELF = /^(input|textarea|select)\||\|(textbox|search|searchbox|combobox)\|/
+
 function judgeDiff(tool, args, result) {
   const by = 'deterministic diff (no OPENAI_API_KEY - model judge skipped)'
+  const added = result.added || []
   if (result.error) return { verified: false, reason: `replay threw: ${result.error}`, by }
   if (result.unfilled?.length) return { verified: false, reason: `arguments never reached a field: ${result.unfilled.join(', ')} - selectors have drifted`, by }
   if (!result.effect) return { verified: false, reason: 'the page did not change at all', by }
-  if (result.effect !== result.expected) return { verified: false, reason: `predicted ${result.expected}, observed ${result.effect}`, by }
-  if (!result.ok) return { verified: false, reason: `observed ${result.effect} but the diff was empty`, by }
-  const echo = (result.added || []).find((a) => Object.values(args).some((v) => typeof v === 'string' && a.includes(v)))
-  return {
-    verified: true,
-    reason: echo ? `observed ${result.effect}; the submitted value came back on the page` : `observed ${result.effect} as predicted`,
-    by,
+
+  const banner = added.find((a) => /\|(status|alert)\|/.test(a) && SUCCESS.test(a))
+  if (banner) return { verified: true, reason: `the app announced it: "${banner.split('|').pop().replace(/\n/g, ' ').slice(0, 60)}"`, by }
+
+  const echo = added.find((a) => !SELF.test(a) && Object.values(args).some((v) => typeof v === 'string' && v.length > 3 && a.includes(v)))
+  if (echo) {
+    const note = result.effect === result.expected ? '' : ` (replay called it ${result.effect}; it drops the value from diff())`
+    return { verified: true, reason: `the submitted value came back on the page${note}`, by }
   }
+  // Node counting alone is not proof. A page that changed is not a write.
+  return { verified: false, reason: `observed ${result.effect} but nothing confirmed a write: no success banner, and no argument echoed outside the field it was typed into`, by }
 }
 
 export async function verifyAll(tools, { headless = true, log = () => {} } = {}) {
@@ -126,7 +130,8 @@ export async function verifyAll(tools, { headless = true, log = () => {} } = {})
   try {
     await ensure(session)
     for (const [i, tool] of tools.entries()) {
-      if (i) await new Promise((r) => setTimeout(r, PACE_MS))
+      await session.page.goto(tool.recipe.seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
+      await session.page.waitForTimeout(PACE_MS)
       const args = exampleArgs(tool, `${token}-${i}`)
       let result
       try {
@@ -134,12 +139,17 @@ export async function verifyAll(tools, { headless = true, log = () => {} } = {})
       } catch (e) {
         result = { ok: false, error: e.message?.split('\n')[0] || String(e) }
       }
-      let verdict
-      try {
-        verdict = keyed ? await judgeModel(tool, args, result) : judgeDiff(tool, args, result)
-      } catch (e) {
-        // A judge that is down must not fail a tool on the judge's behalf.
-        verdict = { ...judgeDiff(tool, args, result), by: `fell back to diff: ${e.message?.split('\n')[0] || e}` }
+      // The diff is the floor. The model may overturn a pass - a toast reading
+      // "deleted" when creation was predicted - but never a rejection: it has been
+      // caught citing the input's own echo as independent evidence, and a judge
+      // looser than the free one is worse than none.
+      const floor = judgeDiff(tool, args, result)
+      let verdict = floor
+      if (keyed) {
+        try {
+          const m = await judgeModel(tool, args, result)
+          verdict = m.verified && !floor.verified ? { ...floor, by: `${floor.by}; ${m.by} disagreed but cannot overturn a rejection` } : m
+        } catch (e) { verdict = { ...floor, by: `fell back to diff: ${e.message?.split('\n')[0] || e}` } }
       }
       const verification = { verified: verdict.verified, reason: verdict.reason, at: new Date().toISOString(), by: verdict.by }
       out.push({ ...tool, verification })
@@ -156,35 +166,34 @@ function table(rows) {
   console.log(`  ${'-'.repeat(78)}`)
   for (const { tool, result, verification } of rows) {
     const mark = verification.verified ? '\x1b[32mPASS\x1b[0m' : '\x1b[31mFAIL\x1b[0m'
-    console.log(`  ${pad(tool.name, 20)} ${pad(tool.recipe.expect, 10)} ${pad(result.effect || result.error ? result.effect || 'error' : 'none', 10)} ${mark} ${verification.reason.slice(0, 70)}`)
+    console.log(`  ${pad(tool.name, 20)} ${pad(tool.recipe.expect, 10)} ${pad(result.effect || (result.error ? 'error' : 'none'), 10)} ${mark} ${verification.reason.slice(0, 70)}`)
   }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const toolsPath = join(OUT_DIR, APP, 'tools.json')
   const bundle = JSON.parse(readFileSync(toolsPath, 'utf8'))
+  // Re-judge the rejects: a fix is meant to revive them, and a verifier that
+  // never revisits them cannot say whether it did.
+  const pending = [...bundle.tools, ...(bundle.rejected || [])]
   const keyed = Boolean(config.keys.openai)
   console.log(`\n  apic verify -> ${bundle.target}`)
-  console.log(`  judge: ${keyed ? `openai ${MODEL} (structured output)` : '\x1b[33mdeterministic diff - no OPENAI_API_KEY, degrading\x1b[0m'}`)
-  console.log(`  ${bundle.tools.length} tools to replay with fresh arguments\n`)
+  console.log(`  judge: ${keyed ? `diff floor + openai ${MODEL} (structured output)` : '\x1b[33mdeterministic diff only - no OPENAI_API_KEY, degrading\x1b[0m'}`)
+  console.log(`  ${pending.length} tools to replay with fresh arguments\n`)
 
   const rows = []
-  const judged = await verifyAll(bundle.tools, {
-    headless: !process.argv.includes('--headed'),
-    log: (row) => { rows.push(row); console.log(`    ${row.verification.verified ? '\x1b[32m*\x1b[0m' : '\x1b[31mx\x1b[0m'} ${row.tool.name}`) },
-  })
+  const log = (row) => { rows.push(row); console.log(`    ${row.verification.verified ? '\x1b[32m*\x1b[0m' : '\x1b[31mx\x1b[0m'} ${row.tool.name}`) }
+  const judged = await verifyAll(pending, { headless: !process.argv.includes('--headed'), log })
 
   const keep = judged.filter((t) => t.verification.verified)
   const drop = judged.filter((t) => !t.verification.verified)
 
   // emit() rewrites tools.json with whatever it is handed, so the server and
-  // README are built from the survivors and the full record is written back
-  // afterwards. Rejected tools keep their verdict; they just are not served.
+  // README are built from the survivors and the full record is written back after.
   emit(keep, { app: bundle.app, outDir: OUT_DIR, target: bundle.target })
   writeFileSync(toolsPath, JSON.stringify({ ...bundle, tools: keep, rejected: drop, verifiedAt: new Date().toISOString() }, null, 2))
 
   table(rows)
   console.log(`\n  ${keep.length}/${judged.length} verified -> ${join(OUT_DIR, APP)}/server.js serves ${keep.length}`)
-  if (drop.length) console.log(`  ${drop.length} rejected, kept in tools.json under "rejected" with verified:false`)
-  console.log()
+  if (drop.length) console.log(`  ${drop.length} rejected, kept in tools.json under "rejected" with verified:false\n`)
 }
