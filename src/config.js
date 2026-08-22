@@ -1,7 +1,7 @@
 import 'dotenv/config'
 
 const REQUIRED_BY_STAGE = {
-  explore:    ['H_API_KEY'],
+  explore:    ['HAI_API_KEY'],
   perceive:   ['FAL_KEY'],
   synthesize: ['OPENAI_API_KEY'],
   verify:     ['OPENAI_API_KEY'],
@@ -19,7 +19,7 @@ export const config = {
     openai:  process.env.OPENAI_API_KEY,
     fal:     process.env.FAL_KEY,
     tavily:  process.env.TAVILY_API_KEY,
-    h:       process.env.H_API_KEY,
+    h:       process.env.HAI_API_KEY,
     pioneer: process.env.PIONEER_API_KEY,
   },
 }

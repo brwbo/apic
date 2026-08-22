@@ -30,7 +30,15 @@ const checks = [
       return r.ok ? true : `HTTP ${r.status}`
     },
   },
-  { name: 'h', env: 'H_API_KEY', stages: 'explore', live: null },
+  {
+    name: 'h', env: 'HAI_API_KEY', stages: 'explore',
+    live: async (k) => {
+      const r = await fetch('https://agp.eu.hcompany.ai/api/v2/agents', { headers: { Authorization: `Bearer ${k}` } })
+      if (r.status === 401 || r.status === 403) return `HTTP ${r.status} - key rejected`
+      if (r.status === 429) return 'rate limited (free tier is 5 req/min)'
+      return r.status < 500 ? true : `HTTP ${r.status}`
+    },
+  },
   { name: 'Pioneer', env: 'PIONEER_API_KEY', stages: 'distill (stretch)', live: null },
 ]
 
