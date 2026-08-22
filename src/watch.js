@@ -118,13 +118,10 @@ while (!stop) {
         healedAt: new Date(Date.now()).toISOString(),
       })
       save(doc)
-      const after = await replay(tool, args(tool), { session }).catch(() => ({ ok: false }))
-      if (after.ok) {
-        stats.repairs++; stats.repairMs.push(Date.now() - t0)
-        rows.push({ name: tool.name, ok: true, healed: true, note: fix.note })
-        continue
-      }
-      rows.push({ name: tool.name, ok: false, note: `healed but still failing: ${fix.note}` })
+      // heal replays the candidate before it claims a repair, so a second
+      // replay here would only mean every heal writes two rows to the target.
+      stats.repairs++; stats.repairMs.push(Date.now() - t0)
+      rows.push({ name: tool.name, ok: true, healed: true, note: fix.note })
       continue
     }
     rows.push({ name: tool.name, ok: false, note: fix.note || res.error || res.effect })

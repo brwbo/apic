@@ -11,11 +11,30 @@
  */
 import { discoverOn, discoverInline } from './discover.js'
 import { synthesize } from './synthesize.js'
+import { replay } from './replay.js'
+
+/** Fresh values, so a repair cannot pass on a row an earlier run left behind. */
+function trialArgs(tool) {
+  const token = Date.now().toString(36).slice(-5)
+  const out = {}
+  for (const [k, spec] of Object.entries(tool.inputSchema?.properties || {})) {
+    if (k === 'confirm' || spec.type === 'boolean') out[k] = true
+    else if (spec.type === 'number' || spec.type === 'integer') out[k] = 7
+    else out[k] = `apic heal ${k} ${token}`
+  }
+  return out
+}
 
 /**
- * @returns {{repaired:boolean, recipe?:object, inputSchema?:object, provenance?:object, note:string}}
+ * A re-derived recipe is a hypothesis. `proof` replays it before this reports
+ * success, because the failure mode that matters is not "heal found nothing" -
+ * it is heal returning repaired:true for a recipe that is just as broken, which
+ * a watcher then writes to disk and counts as a repair. Pass `proof: false`
+ * only where the caller replays the candidate itself.
+ *
+ * @returns {{repaired:boolean, recipe?:object, inputSchema?:object, provenance?:object, note:string, proof?:object}}
  */
-export async function heal(tool, session) {
+export async function heal(tool, session, { proof = true, args } = {}) {
   const { page } = session
   const seed = tool.recipe?.seedUrl
   if (!seed) return { repaired: false, note: 'no seed url recorded' }
@@ -36,6 +55,29 @@ export async function heal(tool, session) {
 
   const before = JSON.stringify(tool.recipe)
   const after = JSON.stringify(match.recipe)
+  const delta = before === after ? 'recipe unchanged - failure was not the recipe' : `recipe updated (${describeDelta(tool.recipe, match.recipe)})`
+
+  if (proof) {
+    const candidate = {
+      ...tool,
+      recipe: match.recipe,
+      inputSchema: match.inputSchema ?? tool.inputSchema,
+      provenance: match.provenance ?? tool.provenance,
+    }
+    let res
+    try {
+      res = await replay(candidate, args ?? trialArgs(candidate), { session })
+    } catch (e) {
+      res = { ok: false, error: e.message?.split('\n')[0] || String(e) }
+    }
+    if (!res.ok) {
+      const why = res.error || `effect ${res.effect ?? 'none'}, expected ${res.expected ?? match.recipe.expect}` +
+        (res.unfilled?.length ? `, unfilled: ${res.unfilled.join(', ')}` : '')
+      return { repaired: false, note: `${delta}, but the repair still fails - ${why}`, proof: res }
+    }
+    return { repaired: true, recipe: match.recipe, inputSchema: match.inputSchema, provenance: match.provenance, note: `${delta}, replayed clean`, proof: res }
+  }
+
   // The provenance travels with the recipe, and it is not decoration: replay's
   // opener() clicks by the control handles recorded there, trying them BEFORE
   // recipe.click. A repair that leaves them behind hands the retry the very
@@ -46,7 +88,7 @@ export async function heal(tool, session) {
     recipe: match.recipe,
     inputSchema: match.inputSchema,
     provenance: match.provenance,
-    note: before === after ? 'recipe unchanged - failure was not the recipe' : `recipe updated (${describeDelta(tool.recipe, match.recipe)})`,
+    note: delta,
   }
 }
 

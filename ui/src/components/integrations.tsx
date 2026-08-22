@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { CodeBlock, CodeBlockCode } from "@/components/ui/code-block";
+import { BashTool } from "@/components/ui/bash-tool";
 import { ClaudeIcon, OpenAIIcon, CursorIcon, VSCodeIcon } from "@/components/ui/brand-icons";
 import { cn } from "@/lib/utils";
+import { SectionLabel } from "@/components/section-label";
 
 const SERVER = "./generated/vikunja/server.js";
 
@@ -105,10 +107,10 @@ export function Integrations() {
   };
 
   return (
-    <section id="install" className="border-t border-white/10 bg-[#0a0511] px-6 py-24 sm:px-10 sm:py-32">
+    <section id="install" className="border-t border-white/10 bg-[#120a10] px-6 py-24 sm:px-10 sm:py-32">
       <div className="mx-auto max-w-5xl">
-        <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-primary/80">Install</p>
-        <h2 className="mt-4 max-w-2xl text-3xl font-bold leading-[1.1] tracking-[-0.03em] text-white sm:text-4xl">
+        <SectionLabel>Install</SectionLabel>
+        <h2 className="mt-5 max-w-2xl font-[family-name:var(--font-display)] text-[clamp(2.1rem,4.6vw,3.4rem)] font-extrabold leading-[0.98] tracking-[-0.045em] text-white">
           Hand the compiled server to any agent.
         </h2>
         <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-white/60">
@@ -116,17 +118,17 @@ export function Integrations() {
           client speaks MCP, it speaks to your app.
         </p>
 
-        <div className="mt-10 flex flex-wrap gap-2">
+        <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-3">
           {CLIENTS.map((c) => (
             <button
               key={c.id}
               onClick={() => { setActive(c.id); setCopied(false); }}
               aria-pressed={c.id === active}
               className={cn(
-                "flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-2 border-b-2 pb-2 text-[15px] font-medium transition-colors",
                 c.id === active
-                  ? "border-primary/60 bg-primary/15 text-white"
-                  : "border-white/12 text-white/55 hover:border-white/25 hover:text-white/80",
+                  ? "border-primary text-white"
+                  : "border-transparent text-white/45 hover:text-white/75",
               )}
             >
               <c.Icon className="h-3.5 w-3.5 shrink-0" />
@@ -140,7 +142,7 @@ export function Integrations() {
             <p className="min-w-0 truncate font-mono text-[11px] text-white/40">{client.where}</p>
             <button
               onClick={copy}
-              className="flex shrink-0 items-center gap-1.5 rounded-md border border-white/12 px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-white/55 transition-colors hover:border-white/25 hover:text-white"
+              className="flex shrink-0 items-center gap-1.5 rounded-md border border-white/12 px-2.5 py-1.5 font-mono text-[12px] text-white/55 transition-colors hover:border-white/25 hover:text-white"
             >
               {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               {copied ? "Copied" : "Copy"}
@@ -157,6 +159,20 @@ export function Integrations() {
               confirm before demoing it.
             </p>
           )}
+        </div>
+
+        {/* What the agent actually does with it, as the agent would show it. */}
+        <div className="mt-12 grid gap-3 sm:grid-cols-2">
+          <BashTool
+            label="apic compile"
+            command="node src/compile.js --target http://localhost:3456"
+            output={"explore   9 actions\nverify    9/9 kept\nemit      generated/vikunja/server.js"}
+          />
+          <BashTool
+            state="running"
+            label="apic watch"
+            command="node src/watch.js"
+          />
         </div>
 
         <p className="mt-10 max-w-2xl text-[13px] leading-relaxed text-white/40">

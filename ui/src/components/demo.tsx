@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { EdgeBlur } from "@/components/ui/edge-blur";
+import { SectionLabel } from "@/components/section-label";
 
 export interface DemoProps {
   /** Drop the Loom export at ui/public/demo.mp4 (or .webm) and it appears here. */
@@ -10,10 +12,10 @@ export function Demo({ src = "/demo.mp4", poster }: DemoProps) {
   const [missing, setMissing] = useState(false);
 
   return (
-    <section id="demo" className="border-t border-white/10 bg-[#08040e] px-6 py-24 sm:px-10 sm:py-32">
+    <section id="demo" className="border-t border-white/10 bg-[#0a0509] px-6 py-24 sm:px-10 sm:py-32">
       <div className="mx-auto max-w-5xl">
-        <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-primary/80">The demo</p>
-        <h2 className="mt-4 max-w-2xl text-3xl font-bold leading-[1.1] tracking-[-0.03em] text-white sm:text-4xl">
+        <SectionLabel>The demo</SectionLabel>
+        <h2 className="mt-5 max-w-2xl font-[family-name:var(--font-display)] text-[clamp(2.1rem,4.6vw,3.4rem)] font-extrabold leading-[0.98] tracking-[-0.045em] text-white">
           An agent hits an app with no API, and writes itself one.
         </h2>
         <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-white/60">
@@ -27,12 +29,13 @@ export function Demo({ src = "/demo.mp4", poster }: DemoProps) {
             <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
             <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
             <span className="h-2.5 w-2.5 rounded-full bg-white/20" />
-            <span className="ml-3 font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
+            <span className="ml-3 font-mono text-[12px] text-white/35">
               apic — compile &amp; heal
             </span>
           </div>
 
-          <div className="relative aspect-video w-full bg-black">
+          <div className="relative aspect-video w-full overflow-hidden bg-black">
+            <EdgeBlur position="bottom" height={70} />
             {missing ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-white/[0.04]">
@@ -40,7 +43,7 @@ export function Demo({ src = "/demo.mp4", poster }: DemoProps) {
                     <path d="M8 5v14l11-7z" />
                   </svg>
                 </div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-white/45">
+                <p className="font-mono text-[13px] text-white/45">
                   Demo lands here
                 </p>
                 <p className="max-w-xs text-[12px] leading-relaxed text-white/30">

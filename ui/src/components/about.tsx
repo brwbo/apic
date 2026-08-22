@@ -1,12 +1,13 @@
+import { SectionLabel } from "@/components/section-label";
 const LINKS = [
   { label: "github.com/brwbo", href: "https://github.com/brwbo" },
 ];
 
 export function About() {
   return (
-    <section id="about" className="border-t border-white/10 bg-[#08040e] px-6 py-24 sm:px-10 sm:py-32">
+    <section id="about" className="border-t border-white/10 bg-[#0a0509] px-6 py-24 sm:px-10 sm:py-32">
       <div className="mx-auto max-w-5xl">
-        <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-primary/80">Who built it</p>
+        <SectionLabel>Who built it</SectionLabel>
 
         <div className="mt-8 grid gap-10 sm:grid-cols-[220px_1fr] sm:gap-14">
           <div>
@@ -25,7 +26,7 @@ export function About() {
           </div>
 
           <div>
-            <h2 className="text-3xl font-bold leading-[1.1] tracking-[-0.03em] text-white sm:text-4xl">
+            <h2 className="font-[family-name:var(--font-display)] text-[clamp(2.1rem,4.6vw,3.4rem)] font-extrabold leading-[0.98] tracking-[-0.045em] text-white">
               Ben Rowbotham
             </h2>
 
@@ -54,7 +55,7 @@ export function About() {
               ))}
             </div>
 
-            <p className="mt-8 font-mono text-[10px] uppercase tracking-[0.22em] text-white/30">
+            <p className="mt-8 font-mono text-[13px] text-white/30">
               Solo entry · {"{Tech: Europe}"} × VEED · 22 August 2026
             </p>
           </div>

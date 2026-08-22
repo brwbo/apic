@@ -1,7 +1,8 @@
 import Hero from "@/components/hero";
-import Problem from "@/components/problem";
-import Demo from "@/components/demo";
 import Stack from "@/components/stack";
+import Problem from "@/components/problem";
+import Stats from "@/components/stats";
+import Demo from "@/components/demo";
 import Integrations from "@/components/integrations";
 import About from "@/components/about";
 
@@ -12,15 +13,16 @@ const stillTime = Number(q.get("t") ?? 1.0);
 
 export default function App() {
   return (
-    <main className="min-h-dvh bg-[#08040e]">
+    <main className="min-h-dvh bg-[#0a0509]">
       <Hero still={still} stillTime={stillTime} />
+      <Stack />
       <Problem />
       <Demo />
-      <Stack />
+      <Stats />
       <Integrations />
       <About />
       <footer className="border-t border-white/10 px-6 py-10 sm:px-10">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 font-mono text-[10px] uppercase tracking-[0.2em] text-white/30">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 font-mono text-[12px] text-white/30">
           <span>github.com/brwbo/apic</span>
           <span>OpenAI · fal · Pioneer · Tavily · h</span>
         </div>

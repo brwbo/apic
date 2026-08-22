@@ -23,7 +23,7 @@ export interface AsciiSunsetProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export function AsciiSunset({
-  params: overrides, sourceUrl, bgColor = "#0a0511", className, children, ...rest
+  params: overrides, sourceUrl, bgColor = "#120a10", className, children, ...rest
 }: AsciiSunsetProps) {
   const hostRef = React.useRef<HTMLDivElement>(null);
   const canvasRef = React.useRef<HTMLCanvasElement>(null);

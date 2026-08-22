@@ -1,3 +1,4 @@
+import { SectionLabel } from "@/components/section-label";
 const COLUMNS = [
   {
     kind: "Has an API",
@@ -18,10 +19,10 @@ const COLUMNS = [
 
 export function Problem() {
   return (
-    <section id="problem" className="border-t border-white/10 bg-[#0a0511] px-6 py-24 sm:px-10 sm:py-32">
+    <section id="problem" className="border-t border-white/10 bg-[#120a10] px-6 py-24 sm:px-10 sm:py-32">
       <div className="mx-auto max-w-5xl">
-        <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-primary/80">The problem</p>
-        <h2 className="mt-4 max-w-3xl text-3xl font-bold leading-[1.1] tracking-[-0.03em] text-white sm:text-4xl">
+        <SectionLabel>The problem</SectionLabel>
+        <h2 className="mt-5 max-w-3xl font-[family-name:var(--font-display)] text-[clamp(2.1rem,4.6vw,3.4rem)] font-extrabold leading-[0.98] tracking-[-0.045em] text-white">
           The data was public. There was just no way in.
         </h2>
 
@@ -47,25 +48,30 @@ export function Problem() {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-4 sm:grid-cols-2">
-          {COLUMNS.map((col) => (
-            <div
-              key={col.kind}
-              className={`rounded-xl border p-6 ${
-                col.tone === "ok" ? "border-white/12 bg-white/[0.02]" : "border-primary/25 bg-primary/[0.05]"
-              }`}
-            >
-              <p
-                className={`font-mono text-[10px] uppercase tracking-[0.22em] ${
-                  col.tone === "ok" ? "text-white/45" : "text-primary/90"
-                }`}
-              >
-                {col.kind}
-              </p>
-              <ul className="mt-4 space-y-2.5">
-                {col.lines.map((line) => (
-                  <li key={line} className="flex gap-3 text-[14px] leading-snug text-white/60">
-                    <span className={col.tone === "ok" ? "text-white/25" : "text-primary/50"}>&mdash;</span>
+        {/* The actual target, screenshotted from the running app - not a mockup. */}
+        <figure className="mt-12 overflow-hidden rounded-xl border border-white/12 bg-black/40">
+          <img
+            src="/target-board.png"
+            alt="The Vikunja board apic compiles: four columns of task cards."
+            width={1440}
+            height={900}
+            loading="lazy"
+            decoding="async"
+            className="block w-full"
+          />
+          <figcaption className="border-t border-white/10 px-4 py-2.5 font-mono text-[12px] text-white/35">
+            The target · a Kanban board · no API an agent can call
+          </figcaption>
+        </figure>
+
+        <div className="mt-12 grid gap-x-14 gap-y-10 sm:grid-cols-2">
+          {COLUMNS.map((col, i) => (
+            <div key={col.kind} className={i === 1 ? "sm:border-l sm:border-white/10 sm:pl-14" : ""}>
+              <p className={`text-[15px] font-semibold ${i === 1 ? "text-primary" : "text-white/70"}`}>{col.kind}</p>
+              <ul className="mt-4 space-y-3">
+                {col.lines.map((line, j) => (
+                  <li key={line} className="flex gap-4 text-[15px] leading-snug text-white/55">
+                    <span className="w-4 shrink-0 font-mono text-[12px] text-white/20">{j + 1}</span>
                     {line}
                   </li>
                 ))}
