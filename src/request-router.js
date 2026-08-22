@@ -38,6 +38,27 @@ function hasObservedMoney(observations) {
     .some((row) => Object.values(row || {}).some((value) => MONEY.test(String(value)))))
 }
 
+/** Follow public item URLs into the verified detail tool, for price comparison. */
+async function sweepPriceDetails(tools, observations) {
+  const detailTools = tools.filter((tool) => supportsEvidence(tool, { price: true })
+    && (tool.inputSchema?.required || []).includes('url'))
+  if (!detailTools.length) return
+
+  const urls = [...new Set(observations.flatMap((observation) => (observation.result?.rows || [])
+    .map((row) => row?.url).filter((url) => /^https?:\/\//.test(String(url)))))]
+    .slice(0, Number(process.env.APIC_PRICE_DETAIL_LIMIT || 6))
+  const done = new Set(observations.map((observation) => `${observation.tool}|${observation.arguments?.url || ''}`))
+  for (const url of urls) for (const tool of detailTools) {
+    const key = `${tool.name}|${url}`
+    if (done.has(key)) continue
+    const result = await replayRead(tool, { url })
+    observations.push({ tool: tool.name, arguments: { url }, result: result.ok
+      ? { count: result.count, rows: result.rows.slice(0, 40), url: result.url }
+      : { error: result.error } })
+    done.add(key)
+  }
+}
+
 async function findSites(request) {
   if (!config.keys.tavily) return []
   try {
@@ -92,7 +113,7 @@ async function nextStep(request, tools, observations, needs = {}) {
     const response = await client().chat.completions.create({
       model: MODEL, temperature: 0, response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: 'You are an agent using read-only web tools. Return JSON only. Either {"tool":"exact tool name","arguments":{...}} to call a tool, or {"answer":"concise answer based only on observations"}. Use a tool when more evidence is needed. Never invent prices, availability, or URLs. If price evidence is required, do not answer until observations contain an actual currency value.' },
+        { role: 'system', content: 'You are an agent using read-only web tools. Return JSON only. Either {"tool":"exact tool name","arguments":{...}} to call a tool, or {"answer":"concise answer based only on observations"}. Use a tool when more evidence is needed. Never invent prices, availability, or URLs. If price evidence is required, do not answer until observations contain an actual currency value. For a cheapest-item request, compare only rows that are the requested item (not dips, drinks, delivery fees, or unrelated add-ons), report the lowest visible price and identify that result as a checked public listing rather than a full-market guarantee.' },
         { role: 'user', content: JSON.stringify({ request, requiredEvidence: needs, tools: toolSummary(tools), observations }) },
       ],
     })
@@ -158,6 +179,7 @@ export async function fulfillRequest(request, { outDir = 'generated', log = () =
     if (!result.ok) break
   }
   if (!observations.length) return { ok: false, target, error: 'the planner could not execute a verified tool', tools: tools.map((t) => t.name) }
+  if (needs.price) await sweepPriceDetails(tools, observations)
   const hasMoney = hasObservedMoney(observations)
   if (needs.price && !hasMoney) return { ok: false, target, error: 'the public flow returned no verified monetary evidence for this request', tools: tools.map((t) => t.name) }
   const answer = await nextStep(request, tools, observations, needs)
