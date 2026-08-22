@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { discoverOn, discoverInline, discoverTask, describe, links } from './discover.js'
 import { discoverMove } from './kanban.js'
-import { gesture } from './plan.js'
+import { gesture, learnVocabulary, vocabulary } from './plan.js'
+import { ground, summarise as summariseVocab } from './ground.js'
 import { openSession, ensure, closeSession } from './session.js'
 import { synthesize } from './synthesize.js'
 import { distill, summarise } from './distill.js'
@@ -42,6 +43,26 @@ try {
   const { reused } = await ensure(session)
   console.log(`  session ${reused ? 'reused' : 'authenticated'}\n`)
   const { page } = session
+
+  // Learn the app's own words before deciding what any control means.
+  //
+  // plan.js ships Vikunja's nouns. Pointed at anything else, `gesture()` is
+  // asked about issues and repositories by a table that has never heard of
+  // them, returns null, and the control is dropped - so the compiler is only
+  // as general as a constant in a source file. ground.js reads the target's
+  // documentation instead. Additive and optional: a failure here logs and the
+  // built-in table stands.
+  const app = process.env.APIC_APP || (await page.title()).split(/[|\-–·]/)[0].trim() || 'the target app'
+  const vocab = await ground({ app, url: config.target.url, log: (m) => console.log(`  \x1b[33m!\x1b[0m ${m}`) })
+  if (vocab) {
+    const learned = learnVocabulary(vocab)
+    console.log(`  ${summariseVocab(vocab)}`)
+    if (learned.added.length) console.log(`  learned ${learned.added.length} new: ${learned.added.join(', ')}${learned.refused ? ` (${learned.refused} off-slice term refused - collides with a noun)` : ''}`)
+    else console.log(`  nothing new - the built-in table already covers ${vocabulary().join(', ')}`)
+  } else {
+    console.log(`  ${summariseVocab(null)}`)
+  }
+  console.log()
 
   // A token can expire mid-compile. Without this, discovery happily explores
   // the login page and emits tools called "create account".
