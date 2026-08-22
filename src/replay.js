@@ -2,14 +2,20 @@
  * replay.js - execute a compiled tool against the live app.
  * Deterministic: no model in the loop. This is the whole point.
  */
-import { launch, login } from './explore.js'
 import { snapshot, diff } from './perceive.js'
 import { submitButton } from './forms.js'
+import { openSession, ensure, closeSession } from './session.js'
 
-export async function replay(tool, args, { headless = true } = {}) {
-  const { browser, page } = await launch({ headless })
+/**
+ * Pass an existing `session` to reuse one browser and one login across many
+ * tools - what watch.js should do. Omit it and this opens and closes its own.
+ */
+export async function replay(tool, args, { headless = true, session = null } = {}) {
+  const own = !session
+  const s = session ?? (await openSession({ headless }))
+  const { page } = s
   try {
-    await login(page)
+    if (!s.authed) await ensure(s)
     await page.goto(tool.recipe.seedUrl, { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(500)
     const before = await snapshot(page)
@@ -38,7 +44,7 @@ export async function replay(tool, args, { headless = true } = {}) {
       effect: d.kind, expected: tool.recipe.expect, unfilled,
       added: d.added.slice(0, 3),
     }
-  } finally { await browser.close() }
+  } finally { if (own) await closeSession(s) }
 }
 
 /**

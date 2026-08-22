@@ -5,6 +5,10 @@
  *   heuristic - keyless. Verb+noun from the label, JSON Schema from the fields.
  *   model     - OpenAI, structured output. Better names, better descriptions,
  *               and it can infer preconditions the heuristic cannot see.
+ *
+ * Either way the action arriving here has already been through distill.js, so
+ * `action.effect` may be an SLM classification rather than a node count, and
+ * `action.destructive` decides whether the emitted tool demands a confirm.
  */
 
 const VERBS = [
@@ -28,16 +32,30 @@ function nameFor(label) {
   const lower = label.toLowerCase().trim()
   const hit = VERBS.find(([re]) => re.test(lower))
   const verb = hit ? hit[1] : 'do'
-  const noun = lower.replace(hit?.[0] || '', '').replace(/^(a|an|the)\s+/, '').trim() || 'item'
+  const noun = lower.replace(hit?.[0] || '', '').replace(/\b(a|an|the)\b/g, ' ').trim() || 'item'
   return camel(`${verb} ${noun}`)
 }
 
 const JSON_TYPE = { number: 'number', email: 'string', date: 'string', checkbox: 'boolean' }
 
+/** Say how we know this works, in the terms the evidence actually supports. */
+function describeTool(action) {
+  const a = action.evidence?.announced
+  if (!a) return `${action.label} in the target app. Observed effect: ${action.effect}.`
+  const isBanner = /success|created|saved|added|updated|deleted/i.test(a.text) && !/apic probe/i.test(a.text)
+  return isBanner
+    ? `${action.label}. Confirmed by the app: "${a.text.replace(/\s+/g, ' ').trim()}"`
+    : `${action.label}. Confirmed: the submitted value appeared in the app after the action.`
+}
+
 export function heuristicTool(action) {
   const properties = {}, required = []
   for (const p of action.parameters) {
-    const key = camel(p.name || p.label || p.placeholder || 'value')
+    // A generated id like task-add-textarea-ruqx7h8qv is not a parameter name.
+    // Prefer what a human reads: the label, then the placeholder.
+    const AUTO = /[-_][a-z0-9]{7,}$/i
+    const raw = p.name && !AUTO.test(p.name) ? p.name : (p.label || p.placeholder || p.name || 'value')
+    const key = camel(raw.replace(/^(add|enter|type)\s+(a|an|the)?\s*/i, '').replace(/…|\.\.\.$/, '').trim() || 'value')
     properties[key] = {
       type: JSON_TYPE[p.type] || 'string',
       description: (p.label || p.placeholder || key).replace(/…|\.\.\.$/, '').trim(),
@@ -45,11 +63,18 @@ export function heuristicTool(action) {
     if (p.required) required.push(key)
     p.schemaKey = key
   }
+  // A destructive tool takes an explicit confirm. The classifier decides which
+  // tools those are; without it every tool is treated as safe, which is the
+  // wrong default for a generated API that drives a real app.
+  if (action.destructive) {
+    properties.confirm = { type: 'boolean', description: 'Must be true. This action destroys state and cannot be undone.' }
+    required.push('confirm')
+  }
+
   return {
     name: nameFor(action.label),
-    description: action.evidence?.announced
-      ? `${action.label}. Confirmed by the app: "${action.evidence.announced.text}"`
-      : `${action.label} in the target app. Observed effect: ${action.effect}.`,
+    description: describeTool(action),
+    destructive: Boolean(action.destructive),
     inputSchema: { type: 'object', properties, required },
     // How the emitted server replays this action.
     recipe: {
@@ -59,7 +84,7 @@ export function heuristicTool(action) {
       submit: true,
       expect: action.effect,
     },
-    provenance: { evidence: action.evidence, discoveredBy: 'heuristic' },
+    provenance: { evidence: action.evidence, perception: action.perception, discoveredBy: action.perception?.source === 'pioneer' ? 'pioneer/gliner2' : 'heuristic' },
   }
 }
 
@@ -75,6 +100,7 @@ export function synthesize(actions, { requireConfirmation = true } = {}) {
   const seen = new Set()
   return actions
     .filter((a) => a.committed)
+    .filter((a) => !/apic probe/i.test(a.label))
     .filter((a) => (requireConfirmation ? Boolean(a.evidence?.announced) : a.effect !== 'navigation'))
     .map(heuristicTool)
     .filter((t) => (seen.has(t.name) ? false : seen.add(t.name)))

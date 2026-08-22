@@ -19,11 +19,18 @@ export async function fields(page) {
     for (const el of document.querySelectorAll('input, textarea, select, [contenteditable="true"]')) {
       const r = el.getBoundingClientRect()
       if (!r.width || !r.height) continue
-      const type = el.getAttribute('type') || el.tagName.toLowerCase()
+      const editable = el.getAttribute('contenteditable') === 'true'
+      // A contenteditable is a <h1>/<div>, so tagName is not a field type.
+      const type = editable ? 'text' : (el.getAttribute('type') || el.tagName.toLowerCase())
       if (['hidden', 'submit', 'button', 'checkbox', 'radio'].includes(type)) continue
       const id = el.id
       const name = el.getAttribute('name') || ''
       const placeholder = el.getAttribute('placeholder') || ''
+      // The one handle a rich-text field reliably has. Vikunja's task title is
+      // `<h1 contenteditable aria-label="Title">` - no id, no name, no
+      // placeholder - so without this the rename gesture has no field at all
+      // and rename is undiscoverable.
+      const aria = el.getAttribute('aria-label') || ''
       const labelEl = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : el.closest('label')
       const attr = (v) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 
@@ -34,14 +41,16 @@ export async function fields(page) {
       if (name) selectors.push(`[name="${attr(name)}"]`)
       if (id && !AUTO_ID.test(id)) selectors.push(`#${CSS.escape(id)}`)
       if (placeholder) selectors.push(`[placeholder="${attr(placeholder)}"]`)
+      if (aria) selectors.push(`${el.tagName.toLowerCase()}[aria-label="${attr(aria)}"]`)
       if (id && AUTO_ID.test(id)) selectors.push(`#${CSS.escape(id)}`) // last resort
 
       out.push({
         name: name || id || '',
-        label: (labelEl?.innerText || '').trim().slice(0, 40),
-        placeholder,
+        label: (labelEl?.innerText || aria || '').trim().slice(0, 40),
+        placeholder: placeholder || aria,
         type: type === 'textarea' ? 'text' : type,
         required: el.hasAttribute('required'),
+        editable,
         selector: selectors[0] || null,
         selectors,
       })

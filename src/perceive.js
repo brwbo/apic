@@ -46,13 +46,30 @@ function announced(added) {
   return null
 }
 
+/**
+ * Echo: the value we submitted is now on the page.
+ *
+ * Stronger and more general than a toast - not every app announces a write,
+ * but every app that stored your input shows it back. Together the two cover
+ * announce-and-stay (labels), announce-and-navigate (projects) and
+ * silent-append (kanban quick-add).
+ */
+export function echoed(added, value) {
+  if (!value || String(value).length < 4) return null
+  const needle = String(value).toLowerCase()
+  // The field we typed into echoes trivially. Only rendered content counts:
+  // seeing the value in a list item or link means the app STORED it.
+  const hit = added.find((i) => !/^(input|textarea|select)\|/.test(i) && i.toLowerCase().includes(needle))
+  return hit ? { text: hit.split('|').pop().slice(0, 80), kind: 'creation' } : null
+}
+
 /** Compare two snapshots. Deterministic; no API key. */
-export function diff(before, after) {
+export function diff(before, after, submittedValue) {
   const b = new Set(before.items), a = new Set(after.items)
   const added = [...a].filter((x) => !b.has(x))
   const removed = [...b].filter((x) => !a.has(x))
   const navigated = before.url !== after.url
-  const banner = announced(added)
+  const banner = announced(added) || echoed(added, submittedValue)
   return {
     changed: added.length > 0 || removed.length > 0 || navigated,
     navigated,
@@ -71,7 +88,7 @@ export function diff(before, after) {
 /** Human-readable one-liner for the trajectory log. */
 export function describe(d) {
   if (!d.changed) return 'no change'
-  if (d.announced) return `${d.kind} - app said: "${d.announced.text}"`
+  if (d.announced) return `${d.kind} - confirmed: "${d.announced.text}"`
   if (d.navigated) return `navigated ${d.from} -> ${d.to}`
   const parts = []
   if (d.added.length) parts.push(`+${d.added.length}`)

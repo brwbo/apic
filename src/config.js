@@ -9,6 +9,16 @@ const REQUIRED_BY_STAGE = {
   distill:    ['PIONEER_API_KEY'],
 }
 
+/**
+ * A key set to the empty string is not a key. `.env.example` ships every name
+ * with a blank value, so `process.env.X !== undefined` is true for keys nobody
+ * has filled in yet - which reported five credentials present when two were.
+ */
+const key = (name) => {
+  const v = (process.env[name] || '').trim()
+  return v || undefined
+}
+
 export const config = {
   target: {
     url:  process.env.TARGET_URL  || 'http://localhost:3456',
@@ -16,19 +26,29 @@ export const config = {
     pass: process.env.TARGET_PASS || 'apicdemo2026',
   },
   keys: {
-    openai:  process.env.OPENAI_API_KEY,
-    fal:     process.env.FAL_KEY,
-    tavily:  process.env.TAVILY_API_KEY,
-    h:       process.env.HAI_API_KEY,
-    pioneer: process.env.PIONEER_API_KEY,
+    openai:  key('OPENAI_API_KEY'),
+    fal:     key('FAL_KEY'),
+    tavily:  key('TAVILY_API_KEY'),
+    h:       key('HAI_API_KEY'),
+    pioneer: key('PIONEER_API_KEY'),
+  },
+  pioneer: {
+    base:  process.env.PIONEER_API_BASE || 'https://api.pioneer.ai',
+    // A completed training-job id drops in here unchanged to swap the base
+    // encoder for a LoRA checkpoint fine-tuned on apic's own labels.
+    model: process.env.PIONEER_MODEL || 'fastino/gliner2-base-v1',
+    threshold: Number(process.env.PIONEER_THRESHOLD || 0.6),
+    timeoutMs: Number(process.env.PIONEER_TIMEOUT_MS || 20000),
   },
 }
+
+export function hasKey(name) { return Boolean(config.keys[name]) }
 
 /** Which stages can run with the keys currently present. */
 export function availableStages() {
   return Object.entries(REQUIRED_BY_STAGE).map(([stage, needs]) => ({
     stage,
-    ready: needs.every((k) => Boolean(process.env[k])),
+    ready: needs.every((k) => Boolean(key(k))),
     needs,
   }))
 }
@@ -37,6 +57,6 @@ export function availableStages() {
 export function requireStage(stage) {
   const needs = REQUIRED_BY_STAGE[stage]
   if (!needs) throw new Error(`unknown stage: ${stage}`)
-  const missing = needs.filter((k) => !process.env[k])
+  const missing = needs.filter((k) => !key(k))
   if (missing.length) throw new Error(`stage "${stage}" needs ${missing.join(', ')} - add to .env`)
 }

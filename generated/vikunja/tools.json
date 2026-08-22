@@ -4,8 +4,78 @@
   "generatedBy": "apic",
   "tools": [
     {
+      "name": "createSavedFilter",
+      "description": "NEW SAVED FILTER. Confirmed: the submitted value appeared in the app after the action.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Title"
+          },
+          "descriptionForThisFilterHere": {
+            "type": "string",
+            "description": "Add a description for this filter here,"
+          },
+          "filterQuery": {
+            "type": "string",
+            "description": "Filter query"
+          }
+        },
+        "required": []
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:3456/projects",
+        "click": "NEW SAVED FILTER",
+        "fields": [
+          {
+            "selector": "#Title",
+            "schemaKey": "title"
+          },
+          {
+            "selector": "div[aria-label=\"Add a description for this filter here, hit '/' for more options…\"]",
+            "schemaKey": "descriptionForThisFilterHere"
+          },
+          {
+            "selector": "div[aria-label=\"Filter query\"]",
+            "schemaKey": "filterQuery"
+          }
+        ],
+        "submit": true,
+        "expect": "creation"
+      },
+      "provenance": {
+        "evidence": {
+          "added": [
+            "a||Project description",
+            "li||apic probe 31784\nMark this project as favorite\nOpen project ",
+            "a||apic probe 31784"
+          ],
+          "removed": [
+            "input||on",
+            "a||NEW SAVED FILTER",
+            "a||NEW PROJECT"
+          ],
+          "from": "/projects",
+          "to": "/projects/-16/113",
+          "announced": {
+            "text": "apic probe 31784\nMark this project as favorite\nOpen project ",
+            "kind": "creation"
+          }
+        },
+        "perception": {
+          "kind": "creation",
+          "confidence": null,
+          "source": "heuristic"
+        },
+        "discoveredBy": "heuristic"
+      }
+    },
+    {
       "name": "createProject",
       "description": "NEW PROJECT. Confirmed by the app: \"Success The project was successfully created.\"",
+      "destructive": false,
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -13,7 +83,7 @@
             "type": "string",
             "description": "Title"
           },
-          "typeToSearchForAProject": {
+          "toSearchForAProject": {
             "type": "string",
             "description": "Type to search for a project"
           }
@@ -30,7 +100,7 @@
           },
           {
             "selector": "[placeholder=\"Type to search for a project…\"]",
-            "schemaKey": "typeToSearchForAProject"
+            "schemaKey": "toSearchForAProject"
           }
         ],
         "submit": true,
@@ -39,8 +109,8 @@
       "provenance": {
         "evidence": {
           "added": [
-            "li||apic probe 12802\nMark this project as favorite\nOpen project ",
-            "a||apic probe 12802",
+            "li||apic probe 34582\nMark this project as favorite\nOpen project ",
+            "a||apic probe 34582",
             "a||List"
           ],
           "removed": [
@@ -49,11 +119,16 @@
             "a||NEW PROJECT"
           ],
           "from": "/projects",
-          "to": "/projects/6/45",
+          "to": "/projects/15/117",
           "announced": {
             "text": "Success The project was successfully created.",
             "kind": "creation"
           }
+        },
+        "perception": {
+          "kind": "creation",
+          "confidence": null,
+          "source": "heuristic"
         },
         "discoveredBy": "heuristic"
       }
@@ -61,6 +136,7 @@
     {
       "name": "createLabel",
       "description": "NEW LABEL. Confirmed by the app: \"Success The label was successfully created.\"",
+      "destructive": false,
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -86,7 +162,7 @@
       "provenance": {
         "evidence": {
           "added": [
-            "a||apic probe 65941",
+            "a||apic probe 45050",
             "div|status|Success\nThe label was successfully created."
           ],
           "removed": [],
@@ -96,6 +172,111 @@
             "text": "Success The label was successfully created.",
             "kind": "creation"
           }
+        },
+        "perception": {
+          "kind": "creation",
+          "confidence": null,
+          "source": "heuristic"
+        },
+        "discoveredBy": "heuristic"
+      }
+    },
+    {
+      "name": "doFilters",
+      "description": "FILTERS. Confirmed: the submitted value appeared in the app after the action.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filterQuery": {
+            "type": "string",
+            "description": "Filter query"
+          }
+        },
+        "required": []
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:3456/projects/15/117",
+        "click": "FILTERS",
+        "fields": [
+          {
+            "selector": "div[aria-label=\"Filter query\"]",
+            "schemaKey": "filterQuery"
+          }
+        ],
+        "submit": true,
+        "expect": "creation"
+      },
+      "provenance": {
+        "evidence": {
+          "added": [
+            "button||Close dialog",
+            "div|search|Filters\n\napic\n\nCustom\nNow\nStart of today\nEnd of today\nBeginn",
+            "div|textbox|Filter query"
+          ],
+          "removed": [],
+          "from": "/projects/15/117",
+          "to": "/projects/15/117",
+          "announced": {
+            "text": "Filters\n\napic\n\nCustom\nNow\nStart of today\nEnd of today\nBeginn",
+            "kind": "creation"
+          }
+        },
+        "perception": {
+          "kind": "creation",
+          "confidence": null,
+          "source": "heuristic"
+        },
+        "discoveredBy": "heuristic"
+      }
+    },
+    {
+      "name": "createTask",
+      "description": "Add a task. Confirmed: the submitted value appeared in the app after the action.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "Add a task"
+          }
+        },
+        "required": []
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:3456/projects/15/117",
+        "click": "Add a task",
+        "fields": [
+          {
+            "selector": "#task-add-textarea-v8m96w7o5",
+            "schemaKey": "task"
+          }
+        ],
+        "submit": true,
+        "expect": "creation"
+      },
+      "provenance": {
+        "evidence": {
+          "added": [
+            "input||Mark 'apic probe 77020' as done",
+            "a||apic probe 77020",
+            "button||Add to Favorites"
+          ],
+          "removed": [
+            "button||Create a task."
+          ],
+          "from": "/projects/15/117",
+          "to": "/projects/15/117",
+          "announced": {
+            "text": "apic probe 77020",
+            "kind": "creation"
+          }
+        },
+        "perception": {
+          "kind": "creation",
+          "confidence": null,
+          "source": "heuristic"
         },
         "discoveredBy": "heuristic"
       }

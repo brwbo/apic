@@ -8,6 +8,55 @@ emitted as an MCP server. The app's own API was never read.
 
 ## Tools
 
+### `createSavedFilter`
+
+NEW SAVED FILTER. Confirmed: the submitted value appeared in the app after the action.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title"
+    },
+    "descriptionForThisFilterHere": {
+      "type": "string",
+      "description": "Add a description for this filter here,"
+    },
+    "filterQuery": {
+      "type": "string",
+      "description": "Filter query"
+    }
+  },
+  "required": []
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "added": [
+    "a||Project description",
+    "li||apic probe 31784\nMark this project as favorite\nOpen project ",
+    "a||apic probe 31784"
+  ],
+  "removed": [
+    "input||on",
+    "a||NEW SAVED FILTER",
+    "a||NEW PROJECT"
+  ],
+  "from": "/projects",
+  "to": "/projects/-16/113",
+  "announced": {
+    "text": "apic probe 31784\nMark this project as favorite\nOpen project ",
+    "kind": "creation"
+  }
+}
+```
+</details>
+
 ### `createProject`
 
 NEW PROJECT. Confirmed by the app: "Success The project was successfully created."
@@ -20,7 +69,7 @@ NEW PROJECT. Confirmed by the app: "Success The project was successfully created
       "type": "string",
       "description": "Title"
     },
-    "typeToSearchForAProject": {
+    "toSearchForAProject": {
       "type": "string",
       "description": "Type to search for a project"
     }
@@ -34,8 +83,8 @@ NEW PROJECT. Confirmed by the app: "Success The project was successfully created
 ```json
 {
   "added": [
-    "li||apic probe 12802\nMark this project as favorite\nOpen project ",
-    "a||apic probe 12802",
+    "li||apic probe 34582\nMark this project as favorite\nOpen project ",
+    "a||apic probe 34582",
     "a||List"
   ],
   "removed": [
@@ -44,7 +93,7 @@ NEW PROJECT. Confirmed by the app: "Success The project was successfully created
     "a||NEW PROJECT"
   ],
   "from": "/projects",
-  "to": "/projects/6/45",
+  "to": "/projects/15/117",
   "announced": {
     "text": "Success The project was successfully created.",
     "kind": "creation"
@@ -75,7 +124,7 @@ NEW LABEL. Confirmed by the app: "Success The label was successfully created."
 ```json
 {
   "added": [
-    "a||apic probe 65941",
+    "a||apic probe 45050",
     "div|status|Success\nThe label was successfully created."
   ],
   "removed": [],
@@ -83,6 +132,82 @@ NEW LABEL. Confirmed by the app: "Success The label was successfully created."
   "to": "/labels",
   "announced": {
     "text": "Success The label was successfully created.",
+    "kind": "creation"
+  }
+}
+```
+</details>
+
+### `doFilters`
+
+FILTERS. Confirmed: the submitted value appeared in the app after the action.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "filterQuery": {
+      "type": "string",
+      "description": "Filter query"
+    }
+  },
+  "required": []
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "added": [
+    "button||Close dialog",
+    "div|search|Filters\n\napic\n\nCustom\nNow\nStart of today\nEnd of today\nBeginn",
+    "div|textbox|Filter query"
+  ],
+  "removed": [],
+  "from": "/projects/15/117",
+  "to": "/projects/15/117",
+  "announced": {
+    "text": "Filters\n\napic\n\nCustom\nNow\nStart of today\nEnd of today\nBeginn",
+    "kind": "creation"
+  }
+}
+```
+</details>
+
+### `createTask`
+
+Add a task. Confirmed: the submitted value appeared in the app after the action.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "Add a task"
+    }
+  },
+  "required": []
+}
+```
+
+<details><summary>evidence</summary>
+
+```json
+{
+  "added": [
+    "input||Mark 'apic probe 77020' as done",
+    "a||apic probe 77020",
+    "button||Add to Favorites"
+  ],
+  "removed": [
+    "button||Create a task."
+  ],
+  "from": "/projects/15/117",
+  "to": "/projects/15/117",
+  "announced": {
+    "text": "apic probe 77020",
     "kind": "creation"
   }
 }

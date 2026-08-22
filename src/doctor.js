@@ -4,6 +4,7 @@
  * Run it after editing .env so nobody debugs credentials twice.
  */
 import 'dotenv/config'
+import * as h from './h.js'
 
 const checks = [
   {
@@ -31,15 +32,36 @@ const checks = [
     },
   },
   {
-    name: 'h', env: 'HAI_API_KEY', stages: 'explore',
+    name: 'h', env: 'HAI_API_KEY', stages: 'explore (Holo planner)',
     live: async (k) => {
-      const r = await fetch('https://agp.eu.hcompany.ai/api/v2/agents', { headers: { Authorization: `Bearer ${k}` } })
-      if (r.status === 401 || r.status === 403) return `HTTP ${r.status} - key rejected`
-      if (r.status === 429) return 'rate limited (free tier is 5 req/min)'
+      // Two different surfaces, and apic depends on the second one. The hosted
+      // Agent Platform runs the browser on h's infrastructure, so it cannot
+      // reach a target on localhost; the planner uses Holo inference instead.
+      const r = await fetch('https://agp.eu.hcompany.ai/api/v2/sessions', { headers: { Authorization: `Bearer ${k}` } })
+      const platform = r.status === 401 || r.status === 403 ? `key rejected (HTTP ${r.status})` : `reachable (HTTP ${r.status})`
+
+      const inf = await h.check()
+      if (!inf.ok) return `inference FAILED at ${inf.baseUrl} (${inf.reason}) - set HAI_MODEL_URL; platform ${platform}`
+      return true
+    },
+  },
+  {
+    name: 'Pioneer', env: 'PIONEER_API_KEY', stages: 'distill',
+    live: async (k) => {
+      // /base-models is public, so it proves reachability but not the key.
+      // A one-token /inference against the base encoder is what actually
+      // exercises auth, and it costs a fraction of a credit.
+      const r = await fetch('https://api.pioneer.ai/inference', {
+        method: 'POST',
+        headers: { 'X-API-Key': k, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model_id: 'fastino/gliner2-base-v1', text: 'apic health check', schema: { classifications: [{ task: 'ok', labels: ['yes', 'no'], multi_label: false }] } }),
+        signal: AbortSignal.timeout(20000),
+      })
+      if (r.status === 401 || r.status === 403) return `HTTP ${r.status} - key rejected (must start pio_sk_)`
+      if (r.status === 402) return 'out of credits - top up at pioneer.ai'
       return r.status < 500 ? true : `HTTP ${r.status}`
     },
   },
-  { name: 'Pioneer', env: 'PIONEER_API_KEY', stages: 'distill (stretch)', live: null },
 ]
 
 const targets = [
@@ -52,7 +74,7 @@ const ok = (s) => `\x1b[32m${s}\x1b[0m`, bad = (s) => `\x1b[31m${s}\x1b[0m`, dim
 let blocking = 0
 console.log('\n  apic doctor\n')
 for (const c of checks) {
-  const key = process.env[c.env]
+  const key = (process.env[c.env] || '').trim()
   if (!key) { console.log(`  ${bad('MISSING')}  ${c.name.padEnd(9)} ${dim(c.env)}  ${dim('blocks: ' + c.stages)}`); blocking++; continue }
   if (!c.live) { console.log(`  ${dim('SET    ')}  ${c.name.padEnd(9)} ${dim('present, not live-checked')}`); continue }
   try {
