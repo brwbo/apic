@@ -6,19 +6,83 @@
 import 'dotenv/config'
 import * as h from './h.js'
 
+// Providers say why they refused, in the response body. Guessing instead of
+// quoting them once cost three checks: a Pioneer 403 was reported as a key
+// format problem when the key was fine and the account had no payment method.
+// So: read the body, print what it says, and only fall back to the bare status
+// when there is nothing to read.
+const MESSAGE_KEYS = ['message', 'error', 'detail', 'msg', 'description', 'title', 'reason']
+
+// Providers nest the human-readable string differently: OpenAI uses
+// {error:{message}}, Pioneer {detail:{message}}, fal and Tavily either a plain
+// {detail:"..."} or a FastAPI array of {msg}. Walk the usual keys, shallowly.
+const findMessage = (v, depth = 0) => {
+  if (typeof v === 'string') return v.trim() || null
+  if (!v || typeof v !== 'object' || depth > 4) return null
+  if (Array.isArray(v)) {
+    for (const item of v) { const m = findMessage(item, depth + 1); if (m) return m }
+    return null
+  }
+  for (const k of MESSAGE_KEYS) {
+    if (k in v) { const m = findMessage(v[k], depth + 1); if (m) return m }
+  }
+  return null
+}
+
+// This repo is public and doctor output gets pasted into issues. Never let a
+// server's echo of the credential through.
+const redact = (s, key) =>
+  (key ? s.split(key).join('***') : s).replace(/\b(sk-|pio_sk_|key-)[A-Za-z0-9_-]{8,}/g, '$1***')
+
+const clip = (s) => { const t = s.replace(/\s+/g, ' ').trim(); return t.length > 300 ? `${t.slice(0, 297)}...` : t }
+
+/**
+ * Turn a failed Response into a line the reader can act on, using the server's
+ * own words. Never throws: an empty, truncated or non-JSON body just yields the
+ * status code (plus `fallback`, when the caller has something factual to add).
+ */
+const apiError = async (r, key, fallback = '') => {
+  let raw = ''
+  try { raw = await r.text() } catch { raw = '' }
+  let parsed = null
+  try { parsed = JSON.parse(raw) } catch { parsed = null }
+
+  // HTML error pages carry no useful message, only markup - do not quote them.
+  const plain = raw.trim().startsWith('<') ? '' : raw.trim()
+  const message = findMessage(parsed) || plain
+  const detail = parsed && typeof parsed === 'object' ? (parsed.detail ?? parsed.error ?? parsed) : null
+  const field = (k) => (detail && typeof detail === 'object' && !Array.isArray(detail) && typeof detail[k] === 'string' ? detail[k] : '')
+  const code = field('code') || field('type')
+  const link = field('resolution_url') || field('help_url') || field('docs_url')
+
+  let out = `HTTP ${r.status}`
+  if (message) out += ` - ${redact(clip(message), key)}`
+  else if (fallback) out += ` - ${fallback}`
+  else if (r.status === 401 || r.status === 403) out += ' - credential rejected, no reason given'
+  if (code) out += ` [${code}]`
+  if (link && !out.includes(link)) out += ` -> ${link}`
+  return out
+}
+
+// Only call a key malformed when the API itself complained about its shape.
+const blamesKeyFormat = (s) => /(malformed|must start|must begin|invalid format|bad format|key format|not a valid (api )?key)/i.test(s)
+
 const checks = [
   {
     name: 'OpenAI', env: 'OPENAI_API_KEY', stages: 'synthesize, verify',
     live: async (k) => {
       const r = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${k}` } })
-      return r.ok ? true : `HTTP ${r.status}`
+      return r.ok ? true : await apiError(r, k)
     },
   },
   {
     name: 'fal', env: 'FAL_KEY', stages: 'perceive',
     live: async (k) => {
       const r = await fetch('https://rest.alpha.fal.ai/tokens/', { method: 'POST', headers: { Authorization: `Key ${k}`, 'Content-Type': 'application/json' }, body: '{}' })
-      return r.status < 500 && r.status !== 401 && r.status !== 403 ? true : `HTTP ${r.status}`
+      // A 4xx that is not an auth refusal means the key got through and the
+      // probe body was merely rejected, which is all this check needs to know.
+      if (r.status < 500 && r.status !== 401 && r.status !== 403) return true
+      return await apiError(r, k)
     },
   },
   {
@@ -28,7 +92,7 @@ const checks = [
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_key: k, query: 'apic health check', max_results: 1 }),
       })
-      return r.ok ? true : `HTTP ${r.status}`
+      return r.ok ? true : await apiError(r, k)
     },
   },
   {
@@ -57,9 +121,14 @@ const checks = [
         body: JSON.stringify({ model_id: 'fastino/gliner2-base-v1', text: 'apic health check', schema: { classifications: [{ task: 'ok', labels: ['yes', 'no'], multi_label: false }] } }),
         signal: AbortSignal.timeout(20000),
       })
-      if (r.status === 401 || r.status === 403) return `HTTP ${r.status} - key rejected (must start pio_sk_)`
-      if (r.status === 402) return 'out of credits - top up at pioneer.ai'
-      return r.status < 500 ? true : `HTTP ${r.status}`
+      // 401/403 is not automatically a bad key: billing holds land here too,
+      // and the body says which. 402 likewise names the shortfall itself.
+      if (r.status === 401 || r.status === 403 || r.status === 402) {
+        const msg = await apiError(r, k, r.status === 402 ? 'out of credits - top up at pioneer.ai' : '')
+        return blamesKeyFormat(msg) ? `${msg} (Pioneer keys start pio_sk_)` : msg
+      }
+      // Any other 4xx means auth passed and only the probe payload was refused.
+      return r.status < 500 ? true : await apiError(r, k)
     },
   },
 ]
