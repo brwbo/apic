@@ -31,7 +31,19 @@ export async function fields(page) {
       // placeholder - so without this the rename gesture has no field at all
       // and rename is undiscoverable.
       const aria = el.getAttribute('aria-label') || ''
-      const labelEl = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : el.closest('label')
+      // <label for> is the modern way. Table-layout forms - which is most
+      // software written before 2010, and therefore most software with no API -
+      // put the label in the preceding cell or an adjacent node instead.
+      let labelEl = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null
+      if (!labelEl) labelEl = el.closest('label')
+      let labelText = (labelEl?.innerText || '').trim()
+      if (!labelText) {
+        const cell = el.closest('td, th, .form-group, .field, p, div')
+        const prev = cell?.previousElementSibling
+        const near = (prev?.innerText || '').trim()
+        // a neighbouring cell is only a label if it is short and not a control
+        if (near && near.length < 40 && !prev?.querySelector('input, select, textarea')) labelText = near
+      }
       const attr = (v) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 
       // Ordered locator chain, most durable first. A recorded selector outlives
@@ -42,6 +54,10 @@ export async function fields(page) {
       if (id && !AUTO_ID.test(id)) selectors.push(`#${CSS.escape(id)}`)
       if (placeholder) selectors.push(`[placeholder="${attr(placeholder)}"]`)
       if (aria) selectors.push(`${el.tagName.toLowerCase()}[aria-label="${attr(aria)}"]`)
+      // A stable prefix with a regenerated tail - `task-add-textarea-rywuedqiv`
+      // is a different id on every render, so record what survives.
+      const tail = /^(.+[-_])[A-Za-z0-9]{4,}$/.exec(id || '')
+      if (tail) selectors.push(`[id^="${attr(tail[1])}"]`)
       if (id && AUTO_ID.test(id)) selectors.push(`#${CSS.escape(id)}`) // last resort
 
       out.push({
@@ -65,13 +81,28 @@ export async function fill(page, discovered) {
   for (const f of discovered) {
     const value = fieldValue(f)
     // Record the locator that actually worked, not the one we guessed first.
-    let hit = null
+    let hit = null, chosen = value
     for (const sel of f.selectors?.length ? f.selectors : [f.selector]) {
       if (!sel) continue
-      try { await page.fill(sel, value, { timeout: 1500 }); hit = sel; break } catch { /* try the next */ }
+      try {
+        if (f.type === 'select') {
+          // page.fill() throws on a <select>. ParaBank's open-account form is
+          // nothing but dropdowns, and a compiler that cannot pick an option
+          // cannot compile most enterprise forms.
+          chosen = await page.$eval(sel, (el) => {
+            const opts = [...el.options].filter((o) => o.value !== '' && !/^-+|choose|select/i.test(o.text))
+            return (opts[0] || el.options[0])?.value ?? ''
+          })
+          await page.selectOption(sel, chosen, { timeout: 1500 })
+        } else {
+          await page.fill(sel, value, { timeout: 1500 })
+        }
+        hit = sel
+        break
+      } catch { /* try the next */ }
     }
-    if (hit) used.push({ ...f, value, selector: hit })
-    // no hit: not fillable - a select or a custom widget; skip
+    if (hit) used.push({ ...f, value: chosen, selector: hit })
+    // no hit: not fillable - a custom widget; skip
   }
   return used
 }

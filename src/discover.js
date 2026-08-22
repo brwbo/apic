@@ -68,9 +68,14 @@ export async function discoverInline(page, seedUrl, { onStep } = {}) {
   await page.waitForTimeout(900)
 
   const present = await fields(page)
+  // A field with no label of its own is still part of an action - the action is
+  // named by the control that commits it. ParaBank's open-account form is two
+  // unlabelled selects and a button reading "Open New Account".
+  const commit = await submitButton(page)
   const found = []
   for (const f of present) {
     const g = gesture(f.label || f.placeholder || '', { scope })
+      || (commit ? gesture(commit.label, { scope }) : null)
     if (!g) continue
 
     await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
@@ -84,13 +89,26 @@ export async function discoverInline(page, seedUrl, { onStep } = {}) {
     const [used] = await fill(page, [live])
     if (!used) continue
 
+    // Some controls that look like submits are decorative. Vikunja's
+    // "Create a task." is a heading-styled button that fires no request at all,
+    // while the real control is "ADD" - or just Enter in the field. A button
+    // that changes nothing has not been tried, so fall through to Enter before
+    // concluding the action does not exist.
     const btn = await submitButton(page)
     if (btn) await btn.handle.click({ timeout: 3000 }).catch(() => {})
     else await page.locator(live.selector).press('Enter').catch(() => {})
     await page.waitForTimeout(SETTLE)
 
-    const afterSnap = await snapshot(page)
-    const d = diff(before, afterSnap, used.value)
+    let afterSnap = await snapshot(page)
+    let d = diff(before, afterSnap, used.value)
+
+    if (!d.changed && btn) {
+      await page.fill(live.selector, used.value).catch(() => {})
+      await page.locator(live.selector).press('Enter').catch(() => {})
+      await page.waitForTimeout(SETTLE)
+      afterSnap = await snapshot(page)
+      d = diff(before, afterSnap, used.value)
+    }
     const control = (live.label || live.placeholder || 'submit').replace(/…$/, '').trim()
     const step = record({
       g, control, d, seedUrl,

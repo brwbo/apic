@@ -26,7 +26,7 @@ export async function snapshot(page) {
  * is far stronger evidence than counting DOM nodes, and it survives navigation
  * - which counting does not.
  */
-const SUCCESS = /\b(success|successfully|created|saved|added|updated|deleted|removed)\b/i
+const SUCCESS = /\b(success|successfully|created|saved|added|updated|deleted|removed|opened|complete|completed|confirmed|transferred|submitted)\b/i
 const OUTCOME_VERB = [
   [/\b(created|added)\b/i, 'creation'],
   [/\b(deleted|removed)\b/i, 'deletion'],
@@ -38,8 +38,13 @@ function announced(added) {
     const [tag, role, label] = item.split('|')
     // Must be an announcement region. Otherwise a button labelled
     // "NEW SAVED FILTER" reads as a save that happened.
+    // Modern apps announce in a role="status" region. Apps written before ARIA
+    // announce by replacing the page heading - ParaBank's success page is an
+    // <h1> reading "Account Opened!". Requiring a role makes every legacy app
+    // look silent, and legacy apps are the target market.
     const isBanner = /status|alert/.test(role || '') || /toast|notification/i.test(tag)
-    if (!isBanner || !SUCCESS.test(label || '')) continue
+    const isHeadline = /^h[1-3]$/.test(tag || '')
+    if (!(isBanner || isHeadline) || !SUCCESS.test(label || '')) continue
     const hit = OUTCOME_VERB.find(([re]) => re.test(label))
     return { text: label.replace(/\n/g, ' ').trim().slice(0, 80), kind: hit ? hit[1] : 'mutation', via: 'banner' }
   }
