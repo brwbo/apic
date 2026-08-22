@@ -13,6 +13,16 @@ import { openSession, ensure, closeSession } from './session.js'
  * tools - what watch.js should do. Omit it and this opens and closes its own.
  */
 export async function replay(tool, args, { headless = true, session = null } = {}) {
+  // The schema advertises an explicit confirmation for destructive generated
+  // tools. Enforce that boundary before opening a session or touching the
+  // target: a boolean that is merely documented is not a safety control.
+  if (tool.destructive && args.confirm !== true) {
+    return {
+      ok: false,
+      error: 'This destructive action requires confirm: true.',
+      expected: tool.recipe?.expect,
+    }
+  }
   const own = !session
   const s = session ?? (await openSession({ headless }))
   const { page } = s
