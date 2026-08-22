@@ -19,7 +19,9 @@ import { replay } from './replay.js'
 import { openSession, closeSession } from './session.js'
 import { config } from './config.js'
 
-const GENERATED = join(ROOT, 'generated')
+// Overridable so a cold-start ("no tools until you compile one") can be
+// demonstrated without moving the real output directory aside.
+const GENERATED = process.env.APIC_GENERATED || join(ROOT, 'generated')
 const log = (...m) => console.error('[apic]', ...m)
 
 /** publicName -> { app, tool }. The single source of truth for tools/list. */
@@ -95,14 +97,19 @@ const server = new Server(
   { capabilities: { tools: { listChanged: true } } },
 )
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  const tools = [
     COMPILE_APP,
     ...[...registry].map(([name, { tool }]) => ({
       name, description: tool.description, inputSchema: tool.inputSchema,
     })),
-  ],
-}))
+  ]
+  // Logged deliberately: a tools/list arriving *after* the list_changed line
+  // below is the proof that the client honoured the notification. See
+  // docs/mcp-client.md.
+  log(`tools/list -> ${tools.length} tools [${tools.map(t => t.name).join(', ')}]`)
+  return { tools }
+})
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args = {} } = req.params
@@ -123,8 +130,7 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
 async function runCompile({ url = config.target.url, goal = '' }) {
   if (!/^https?:\/\//.test(String(url))) throw new Error(`compile_app needs an http(s) url, got: ${url}`)
 
-  const lines = []
-  const result = await compile({ url, goal, onLog: (l) => { lines.push(l); log(l) } })
+  const result = await compile({ url, goal, outDir: GENERATED, onLog: (l) => log(l) })
   const names = registerApp(result.app, result.tools)
 
   // The linchpin: tell the client its tool list just changed. If the client
