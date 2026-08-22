@@ -7,17 +7,22 @@ import { cn } from "@/lib/utils";
 import { SectionLabel } from "@/components/section-label";
 
 const SERVER = "./generated/vikunja/server.js";
+const ABS = "/absolute/path/to/apic/generated/vikunja/server.js";
 
 interface Client {
   id: string;
   name: string;
   /** Brand mark, so the list is scannable by logo rather than by reading. */
   Icon: (props: { className?: string }) => React.ReactElement;
-  /** Where the snippet goes. A command, or the file it belongs in. */
+  /** The client's own install route: a command it ships, or the file it reads. */
   where: string;
   language: string;
   code: string;
-  /** How the format was established, so nobody trusts a guess. */
+  /** Paste into that client and let its agent do the wiring. */
+  prompt: string;
+  /** What the prompt route needs before it can work, when it needs anything. */
+  promptNeeds?: string;
+  /** How the config format was established, so nobody trusts a guess. */
   verified: boolean;
 }
 
@@ -30,22 +35,33 @@ const CLIENTS: Client[] = [
     language: "bash",
     verified: true,
     code: `claude mcp add apic -- node ${SERVER}`,
+    prompt: `Register the MCP server at ${SERVER} under the name apic, then list
+its tools and call createTask with title "hello from apic" so I can see it hit
+the real board.`,
   },
   {
     id: "claude-desktop",
     Icon: ClaudeIcon,
     name: "Claude Desktop",
-    where: "~/Library/Application Support/Claude/claude_desktop_config.json",
+    where: "Settings \u2192 Developer \u2192 Edit Config",
     language: "json",
     verified: true,
     code: `{
   "mcpServers": {
     "apic": {
       "command": "node",
-      "args": ["${SERVER}"]
+      "args": ["${ABS}"]
     }
   }
 }`,
+    prompt: `Add an MCP server to my Claude Desktop config at
+~/Library/Application Support/Claude/claude_desktop_config.json.
+
+Name it apic. It runs: node ${ABS}
+Use an absolute path \u2014 Desktop does not start in the repo. Keep every server
+already in the file, and tell me to restart Claude Desktop when it is written.`,
+    promptNeeds:
+      "Desktop needs file access for this \u2014 the Filesystem connector, or Claude Code inside Desktop. Without it, use the config route.",
   },
   {
     id: "codex",
@@ -56,7 +72,11 @@ const CLIENTS: Client[] = [
     verified: false,
     code: `[mcp_servers.apic]
 command = "node"
-args = ["${SERVER}"]`,
+args = ["${ABS}"]`,
+    prompt: `Add an MCP server named apic to ~/.codex/config.toml as an
+[mcp_servers.apic] table \u2014 command "node", args the absolute path to
+generated/vikunja/server.js in this repo. Leave the other mcp_servers tables alone,
+then show me the tools apic exposes.`,
   },
   {
     id: "cursor",
@@ -69,10 +89,15 @@ args = ["${SERVER}"]`,
   "mcpServers": {
     "apic": {
       "command": "node",
-      "args": ["${SERVER}"]
+      "args": ["${ABS}"]
     }
   }
 }`,
+    prompt: `Add an MCP server named apic to ~/.cursor/mcp.json \u2014 command "node",
+args the absolute path to
+generated/vikunja/server.js in this repo. Merge it into the
+existing mcpServers object rather than replacing the file, then tell me to
+enable it under Settings \u2192 MCP.`,
   },
   {
     id: "vscode",
@@ -90,17 +115,26 @@ args = ["${SERVER}"]`,
     }
   }
 }`,
+    prompt: `Add a stdio MCP server named apic to .vscode/mcp.json in this
+workspace \u2014 command "node", args ["${SERVER}"]. Create the file if it
+is missing, then start the server and list the tools it registers.`,
   },
 ];
 
+type Mode = "config" | "prompt";
+
 export function Integrations() {
   const [active, setActive] = useState(CLIENTS[0].id);
+  const [mode, setMode] = useState<Mode>("config");
   const [copied, setCopied] = useState(false);
   const client = CLIENTS.find((c) => c.id === active) ?? CLIENTS[0];
 
+  const isPrompt = mode === "prompt";
+  const body = isPrompt ? client.prompt : client.code;
+
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(client.code);
+      await navigator.clipboard.writeText(body);
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch { /* clipboard blocked - the snippet is selectable anyway */ }
@@ -137,9 +171,32 @@ export function Integrations() {
           ))}
         </div>
 
-        <div className="mt-6">
+        {/* Two routes per client, because the fastest one differs by client:
+            wire it yourself, or hand the client's own agent the job. */}
+        <div className="mt-6 inline-flex rounded-lg border border-white/12 p-0.5">
+          {([
+            ["config", "Wire it up"],
+            ["prompt", `Ask ${client.name}`],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => { setMode(id); setCopied(false); }}
+              aria-pressed={mode === id}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors",
+                mode === id ? "bg-white/10 text-white" : "text-white/45 hover:text-white/75",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3">
           <div className="mb-2 flex items-center justify-between gap-4">
-            <p className="min-w-0 truncate font-mono text-[11px] text-white/40">{client.where}</p>
+            <p className="min-w-0 truncate font-mono text-[11px] text-white/40">
+              {isPrompt ? `paste into ${client.name}` : client.where}
+            </p>
             <button
               onClick={copy}
               className="flex shrink-0 items-center gap-1.5 rounded-md border border-white/12 px-2.5 py-1.5 font-mono text-[12px] text-white/55 transition-colors hover:border-white/25 hover:text-white"
@@ -149,11 +206,23 @@ export function Integrations() {
             </button>
           </div>
 
-          <CodeBlock className="border-white/12 bg-black/60">
-            <CodeBlockCode code={client.code} language={client.language} theme="github-dark-default" />
-          </CodeBlock>
+          {isPrompt ? (
+            <div className="rounded-xl border border-white/12 bg-black/60 px-4 py-4">
+              <p className="whitespace-pre-wrap font-mono text-[13px] leading-relaxed text-white/75">
+                {client.prompt}
+              </p>
+            </div>
+          ) : (
+            <CodeBlock className="border-white/12 bg-black/60">
+              <CodeBlockCode code={client.code} language={client.language} theme="github-dark-default" />
+            </CodeBlock>
+          )}
 
-          {!client.verified && (
+          {isPrompt && client.promptNeeds && (
+            <p className="mt-3 text-[12px] leading-relaxed text-amber-300/70">{client.promptNeeds}</p>
+          )}
+
+          {!isPrompt && !client.verified && (
             <p className="mt-3 text-[12px] leading-relaxed text-amber-300/70">
               Format taken from {client.name}&rsquo;s documentation but not verified on this machine —
               confirm before demoing it.
@@ -165,19 +234,30 @@ export function Integrations() {
         <div className="mt-12 grid gap-3 sm:grid-cols-2">
           <BashTool
             label="apic compile"
-            command="node src/compile.js --target http://localhost:3456"
-            output={"explore   9 actions\nverify    9/9 kept\nemit      generated/vikunja/server.js"}
+            command="TARGET_URL=http://localhost:3456 npm run compile"
+            output={"9 tools synthesised -> generated/vikunja/\nRECALL    8/18\nPRECISION 9/9"}
           />
           <BashTool
             state="running"
             label="apic watch"
-            command="node src/watch.js"
+            command="npm run watch"
           />
         </div>
 
         <p className="mt-10 max-w-2xl text-[13px] leading-relaxed text-white/40">
-          Paths are relative to the apic repo. Use an absolute path if your client starts from a
-          different working directory.
+          Clients that start from the repo take the relative path. The ones showing{" "}
+          <code className="font-mono text-white/55">/absolute/path/to/apic</code> do not start there
+          &mdash; substitute your real checkout, or they will launch nothing.
+        </p>
+
+        {/* The in-process compile the server runs is not the CLI one, and the
+            numbers on this page come from the CLI. Say so where the commands are. */}
+        <p className="mt-4 max-w-2xl text-[13px] leading-relaxed text-white/40">
+          apic also runs as an MCP server itself, compiling on demand and registering the new tools
+          on the same connection. That in-process compile is a reduced pipeline &mdash; no grounding,
+          no vision tier, no board drag &mdash; so it emits fewer tools than{" "}
+          <code className="font-mono text-white/55">npm run compile</code>, which is the path every
+          number on this page was measured on.
         </p>
       </div>
     </section>

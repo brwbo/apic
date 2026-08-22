@@ -9,11 +9,19 @@ emits a typed MCP server for the app.
 Built solo in one day at the [{Tech: Europe} × VEED Hackathon](https://techeurope.notion.site/techeuropexveed),
 London, 22 August 2026.
 
+**→ [apic-ui.vercel.app](https://apic-ui.vercel.app) — the demo video is there,
+along with what each partner model decides and what the compiler measured.**
+
 ---
 
 ## Demo
 
-_2-minute walkthrough: **TODO — Loom link**_
+**[Watch it on the site: apic-ui.vercel.app](https://apic-ui.vercel.app/#demo)** —
+two minutes, unedited: the compile, the generated tools appearing in a live
+session, and the watcher catching a UI change on its own.
+
+The same site carries the numbers this README reports, the per-partner
+breakdown, and the install snippet for every MCP client.
 
 ## The problem
 
@@ -34,10 +42,11 @@ a function call.
 
 | Stage | Does | Tech |
 |---|---|---|
+| **Ground** | Reads the target's own documentation and learns that app's nouns, so the vocabulary is not hardcoded to Vikunja's | Tavily + OpenAI, cached per host — CLI path only |
 | **Explore** | Drives the app, ranks affordances so create actions go first, opens forms and submits them | Playwright + [h](#partner-technologies) (escalation tier for controls the vocabulary can't name) |
 | **Perceive** | Decides whether anything meaningful changed | DOM diff, escalating to fal on the CLI path |
 | **Synthesise** | Turns a trajectory into a typed tool schema | deterministic — no model call |
-| **Verify** | Replays the tool cold with arguments the app has never seen | keyless judge + OpenAI |
+| **Verify** | Replays the tool cold with arguments the app has never seen | keyless diff floor, then the fine-tuned Pioneer judge, with OpenAI on standby |
 | **Emit** | Writes a runnable MCP server, its schemas, and its evidence | — |
 | **Watch** | Re-runs the suite on an interval | — |
 | **Heal** | A red tool re-enters discovery at its own seed | — |
@@ -109,14 +118,20 @@ nothing drifted at all.
 Continuous verification over a live afternoon:
 
 ```
-58 checks · 22 breaks · 1 automatic repair · MTTR 21s
+327 checks · 118 breaks · 3 automatic repairs · MTTR 20s
 ```
 
-Read that break count sceptically: it predates a bug in `heal()`, which
-returned a repaired recipe without the fresh `provenance` that `replay()`'s
-opener actually clicks by. A tool whose control had been renamed therefore
-healed on every cycle and went green on none. Fixed; the counters have not been
-re-gathered over a comparable window.
+(`out/watch-stats.json`, 38 cycles from 11:33 BST, still running as this was
+written — the counters move.)
+
+Read that break count for what it is. `stats.breaks++` fires on every red
+replay in every cycle, so three tools that stay red across 38 cycles read as
+~114 breaks — it is a red-tool-cycle count, not 118 separate drift events. And
+this watcher was started at 11:33, before the fix to `heal()`, which returned a
+repaired recipe without the fresh `provenance` that `replay()`'s opener
+actually clicks by; a tool whose control had been renamed therefore healed on
+every cycle and went green on none. That is most of the 6/9. Fixed in the code,
+not re-gathered over a comparable window.
 
 ## Partner technologies
 
@@ -132,7 +147,7 @@ which is what the status column records.
 | **fal** | Perceive | Fast VLM for meaningful-vs-cosmetic judgement, escalated to only when the DOM diff is ambiguous | **in use** — 4/4 escalated steps judged last compile, 2 of them ruled cosmetic. CLI path only; `compile_app` does not escalate |
 | **Pioneer** | Verify, Distil | **A GLiNER2 encoder fine-tuned on apic's own verify evidence replaces the GPT-4.1-mini judge** — and beats it on held-out tools (below). Also the diff-text classifier in `distill.js` | **in use** — `PIONEER_JUDGE_MODEL` set: the live `verify` pass above was judged by the fine-tuned encoder, 8/9, every verdict in 106–183 ms |
 | **h** | Explore | Reads the page and names the write actions the keyless vocabulary refused | **in use** — runs once per seed on the leftovers; names 0 of 3 on Vikunja, correctly |
-| **Tavily** | Ground | App documentation → domain vocabulary, so tools are named `createIssue`, not `btn_submit_2` | **not built** — declared in `config.js` and `doctor.js`, never implemented |
+| **Tavily** | Ground | App documentation → domain vocabulary, so tools are named `createIssue`, not `btn_submit_2` | **in use** — `ground.js` runs before the first seed; additive to the built-in table, cached per host, CLI path only |
 
 The two-tier split is the product's own thesis applied to itself: **fal is the
 cheap high-frequency perception layer, OpenAI is the expensive low-frequency
@@ -205,10 +220,13 @@ judge is.
 `openai/gpt-4.1-mini disagreed but cannot overturn a rejection`. That asymmetry
 is deliberate: a judge that can promote its own guesses is a precision leak.
 
-**Pioneer — GLiNER2 (`fastino/gliner2-base-v1`), one batched `POST /inference`.**
-[`distill.js`](src/distill.js) sends the whole trajectory's diff text in a
-single call and gets back a state-change class, a destructive flag and the
-domain nouns, above a 0.6 confidence threshold. A completed training-job id in
+**Pioneer — GLiNER2 (`fastino/gliner2-base-v1`), one `POST /inference` per step.**
+[`distill.js`](src/distill.js) sends each step's diff text on its own request
+and gets back a state-change class, a destructive flag and the domain nouns,
+above a 0.6 confidence threshold. It used to batch the whole trajectory, and
+batching is what the third hard-won lesson below is about: the same text scored
+`creation` 0.777 alone, `creation` 1.000 at position 0, and `DELETION` 0.600 at
+position 2 of the reversed batch — a wrong label clearing the threshold. A completed training-job id in
 `PIONEER_MODEL` swaps the base encoder for a checkpoint fine-tuned on apic's own
 labels — the system compiling its own perception layer — and nothing else
 changes.
@@ -259,8 +277,22 @@ is why the distil stage was silent all morning); GLiNER2 trains as LoRA only —
 and batch inference (`text: [...]`) on a fine-tuned model returns labels that
 do not line up with the inputs, so the judge sends one text per request.
 
-**Tavily — not built.** The `ground` stage is declared in `config.js` and
-reported by `doctor.js`, and no implementation was written.
+**Tavily — `api.tavily.com/search`, five results, answer included.**
+[`ground.js`](src/ground.js) runs before the first seed. `plan.js` ships
+Vikunja's nouns — bucket, task, label, project — and pointed at anything else
+`gesture()` is asked about issues and repositories by a table that has never
+heard of them, returns null, and the control is dropped. Tavily fetches the
+target's own documentation; OpenAI structures that prose into a closed noun set
+under a strict schema; every term is validated against `/^[a-z][a-z-]{1,18}$/`,
+capped at 12, and **merged into** the built-in table rather than replacing it,
+so grounding can add vocabulary and can never take Vikunja's away. Cached per
+host under `.apic/`, so a repeat compile spends nothing and a demo does not
+depend on venue wifi.
+
+It degrades in three steps — no Tavily key, no evidence; no OpenAI key, the
+evidence cannot be structured; nothing survives validation — and each one logs
+and leaves the built-in table standing. Like fal, it runs from `cli.js`:
+`compile_app` on the MCP server uses the built-in vocabulary.
 
 **So the recall figures above were produced keyless**, with fal on the
 escalated perception steps and an OpenAI judge on the verify pass. They are not
@@ -405,9 +437,15 @@ Stated plainly, because a compiler that hides its failure modes isn't one.
   Vikunja's board slice is already covered by the regexes. The escalation is
   real and measured; the gain is zero here, and a target whose controls are
   icons rather than verb phrases is the case that would show it.
-- **fal escalation is CLI-only.** `adjudicate()` runs from `cli.js`, not
-  `compile.js`, so a compile driven through `compile_app` on the MCP server
-  never reaches the vision tier.
+- **`compile_app` runs a reduced pipeline.** [`compile.js`](src/compile.js) is
+  the in-process compile the MCP server calls, and it is `cli.js` minus five
+  things: grounding (Tavily/OpenAI), seed discovery, the dedicated form-page
+  probe, the task-detail seed and the Kanban drag, plus fal's vision tier —
+  `adjudicate()` runs from `cli.js` only. It keeps discovery, persistence,
+  Pioneer distillation, synthesis and emit. That is why the transcript above
+  shows four tools where `npm run compile` produces nine: **the live-compiler
+  demo and the 9-tool bundle are two different paths**, and only the CLI one
+  is what the recall figures describe.
 - **Pioneer looked unavailable all morning** — first `403
   payment_method_required`, and after a new key, `categories: []` on every
   call, which the code read as "no opinion" and fell through to the heuristic.

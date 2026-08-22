@@ -3,12 +3,18 @@ import { useInView } from "motion/react";
 import NumberTicker, { type NumberTickerRef } from "@/components/ui/basic-number-ticker";
 import { SectionLabel } from "@/components/section-label";
 
-/** Measured on Vikunja, 22 August 2026. Nothing here is aspirational. */
+/**
+ * Measured on Vikunja, 22 August 2026. Nothing here is aspirational.
+ *
+ * The repair figure is the watcher's own counter (out/watch-stats.json), not a
+ * demo stopwatch: three repairs at 20.8s, 21.2s and 18.3s. It used to read 15s,
+ * which no run ever produced.
+ */
 const STATS = [
   { value: 9, suffix: "", label: "tools compiled", sub: "from the UI, never the API" },
   { value: 8, suffix: "", label: "real write actions found", sub: "scored against Vikunja's own OpenAPI spec" },
   { value: 100, suffix: "%", label: "precision", sub: "every emitted tool maps to a real endpoint" },
-  { value: 15, suffix: "s", label: "to self-repair", sub: "button renamed, detected and healed unattended" },
+  { value: 20, suffix: "s", label: "mean time to repair", sub: "3 unattended repairs, measured by the watcher over a live afternoon" },
 ];
 
 function Stat({ s, i }: { s: (typeof STATS)[number]; i: number }) {
