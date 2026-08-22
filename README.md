@@ -130,7 +130,7 @@ which is what the status column records.
 |---|---|---|---|
 | **OpenAI** | Verify | An independent verdict on whether the predicted effect occurred, layered on the keyless diff floor. It can uphold a rejection, never overturn one | **in use** — it ruled on the one tool `verify` rejected |
 | **fal** | Perceive | Fast VLM for meaningful-vs-cosmetic judgement, escalated to only when the DOM diff is ambiguous | **in use** — 4/4 escalated steps judged last compile, 2 of them ruled cosmetic. CLI path only; `compile_app` does not escalate |
-| **Pioneer** | Distil | Small classifier over the diff text — state change, destructiveness, domain nouns. One batched call per compile | **blocked all day** — `403 payment_method_required`, later `401 Invalid API key`; perception falls back to the heuristic |
+| **Pioneer** | Verify, Distil | **A GLiNER2 encoder fine-tuned on apic's own verify evidence replaces the GPT-4.1-mini judge** — and beats it on held-out tools (below). Also the diff-text classifier in `distill.js` | **in use** — `PIONEER_JUDGE_MODEL` set: the live `verify` pass above was judged by the fine-tuned encoder, 8/9, every verdict in 106–183 ms |
 | **h** | Explore | Reads the page and names the write actions the keyless vocabulary refused | **in use** — runs once per seed on the leftovers; names 0 of 3 on Vikunja, correctly |
 | **Tavily** | Ground | App documentation → domain vocabulary, so tools are named `createIssue`, not `btn_submit_2` | **not built** — declared in `config.js` and `doctor.js`, never implemented |
 
@@ -213,9 +213,51 @@ domain nouns, above a 0.6 confidence threshold. A completed training-job id in
 labels — the system compiling its own perception layer — and nothing else
 changes.
 
-*Currently blocked:* `403 payment_method_required`. Every compile logs it and
-falls back to the node-count heuristic, which is why the emitted tools record
-`"discoveredBy": "heuristic"`.
+**Pioneer — the fine-tuned verify judge.** This is the Pioneer side-challenge
+entry: *fine-tune a model that outperforms or replaces a general-purpose LLM
+API call.* The call it replaces is `judgeModel()` in
+[`verify.js`](src/verify.js) — GPT-4.1-mini, a 200-word system prompt,
+structured output, one question per replayed tool: *given this DOM diff, did
+the predicted write demonstrably happen?* That is a two-label text
+classification wearing a chat completion.
+
+[`pioneer-train.js`](src/pioneer-train.js) builds the replacement from the
+product's own exhaust, with no hand labelling:
+
+1. **collect** — replay every compiled tool six times with fresh arguments
+   through `verifyAll()`, recording the evidence and the verdict the shipped
+   judge (diff floor + GPT) gave it. 54 real rows.
+2. **dataset** — derive negatives by deleting the evidence the floor keys on
+   (banner gone, echo moved into the input that typed it, argument unfilled,
+   replay threw, nothing changed) and positives that preserve the label
+   (node order reversed, unrelated nodes added, arguments renamed to values a
+   person would type). Every derived row is relabelled by the same
+   deterministic floor. 788 rows; **held out by tool**, so the bench measures
+   tools the encoder has never seen.
+3. **upload / train** — `POST /felix/datasets/upload/url` → presigned PUT →
+   `POST /felix/training-jobs`, `fastino/gliner2-base-v1`, LoRA, 12 epochs.
+   Trains in about four minutes.
+4. **bench** — the held-out rows through both judges. The LLM is called via
+   the unchanged `judgeModel()`, so it sees exactly what it sees in production.
+
+| judge | accuracy | precision | recall | false pos | false neg | ms/row |
+|---|---|---|---|---|---|---|
+| **Pioneer GLiNER2 fine-tune** (job `91370379…`) | **94.4%** | **100%** | 87.6% | **0** | 12 | **150** |
+| OpenAI GPT-4.1-mini | 89.3% | 84.3% | **93.8%** | 17 | 6 | 890 |
+
+215 held-out rows, two tools (`createTask`, `assignLabel`) absent from training.
+The encoder gives up some recall for zero false positives — the right trade
+for this judge, which by design may uphold a rejection but never promote a
+guess. Set `PIONEER_JUDGE_MODEL` to the job id and `verify` uses it; OpenAI
+stays on standby as the fallback, and with no keys at all the floor still runs.
+
+Three things learned the hard way, all verified live and recorded in the code:
+`multi_label`/`top_k` inside a classification spec make the unified
+`/inference` path return `categories: []` for every text (this, not credit,
+is why the distil stage was silent all morning); GLiNER2 trains as LoRA only —
+`training_type: "full"` is accepted and fails inside Modal with no log line;
+and batch inference (`text: [...]`) on a fine-tuned model returns labels that
+do not line up with the inputs, so the judge sends one text per request.
 
 **Tavily — not built.** The `ground` stage is declared in `config.js` and
 reported by `doctor.js`, and no implementation was written.
@@ -366,11 +408,16 @@ Stated plainly, because a compiler that hides its failure modes isn't one.
 - **fal escalation is CLI-only.** `adjudicate()` runs from `cli.js`, not
   `compile.js`, so a compile driven through `compile_app` on the MCP server
   never reaches the vision tier.
-- **Pioneer was unavailable all day** — `403 payment_method_required`, then
-  `401 Invalid API key` on the same untouched key a few hours later — so
-  perception falls back to the heuristic. Each
+- **Pioneer looked unavailable all morning** — first `403
+  payment_method_required`, and after a new key, `categories: []` on every
+  call, which the code read as "no opinion" and fell through to the heuristic.
+  The second was a request-shape bug (`multi_label`/`top_k`), not the API. Each
   integration was written to degrade silently, and each did — the degradation
-  is the intended behaviour; not noticing for a whole afternoon is not.
+  is the intended behaviour; not noticing for a whole morning is not.
+- **The fine-tuned judge has seen one app.** Its 788 training rows are all
+  Vikunja. The held-out split is by tool, not by app; a Gitea or ParaBank bench
+  is the next honest test, and `collect` against a second target is how to
+  get it.
 - **The second target compiles thinly.** Gitea now compiles end to end —
   `createRepository` and `createIssue`, both verified, **2/13 on its issue
   slice** against `swagger.v1.json`. It took no change to discovery: the two

@@ -14,9 +14,9 @@ const STACK: Item[] = [
   // the label, JSON Schema off the fields, no model in it. OpenAI's two real
   // jobs are structuring Tavily's prose into a vocabulary, and judging whether a
   // replayed tool did what it claimed.
-  { name: "OpenAI", src: "/logos/openai_dark.svg", stage: "ground · verify" },
+  { name: "OpenAI", src: "/logos/openai_dark.svg", stage: "ground · standby" },
   { name: "Tavily", src: "/logos/tavily.svg", stage: "ground" },
-  { name: "Pioneer", src: "/logos/pioneer.svg", stage: "distill" },
+  { name: "Pioneer", src: "/logos/pioneer.svg", stage: "verify · distill" },
 ];
 
 const CLIENTS: Item[] = [

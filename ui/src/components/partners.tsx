@@ -44,12 +44,12 @@ const PARTNERS: Partner[] = [
   },
   {
     name: "OpenAI",
-    stage: "ground · verify",
+    stage: "ground · verify (standby)",
     src: "/logos/openai_dark.svg",
-    role: "Turns the documentation Tavily found into a closed vocabulary, then rules on whether a replayed tool did what it claims.",
+    role: "Turns the documentation Tavily found into a closed vocabulary, and stands behind the fine-tuned Pioneer judge as the fallback ruling on replayed tools.",
     detail: "gpt-4.1-mini · strict JSON schema, structured output",
     note: "Not synthesise — that stage takes verb and noun off the label and JSON Schema off the fields, with no model in it at all. In verify OpenAI sits on top of the keyless diff judge and may tighten a verdict but never loosen one. It has been caught citing a filter box's own echo as independent evidence — a judge looser than the free check is worse than no judge.",
-    without: "The built-in noun table stands, and deterministic diff judging alone.",
+    without: "The built-in noun table stands; if the Pioneer judge is also absent, deterministic diff judging alone.",
   },
   {
     name: "Tavily",
@@ -63,11 +63,11 @@ const PARTNERS: Partner[] = [
   {
     name: "Pioneer",
     src: "/logos/pioneer.svg",
-    stage: "distill",
-    role: "Classifies what kind of change happened, replacing the softest inference in the compiler.",
-    detail: "GLiNER2, a ~300M encoder · one forward pass for classification and NER · $0.15/M tokens",
-    note: "POST /inference over /gliner-2 despite the lower rate limit, because it returns the inference_id that feedback needs. The same slot accepts a fine-tuned training-job id, so base model to LoRA checkpoint is one environment variable.",
-    without: "Counting DOM nodes and guessing from the delta.",
+    stage: "verify · distill",
+    role: "A GLiNER2 encoder fine-tuned on apic's own verify evidence replaces the GPT-4.1-mini judge — and beats it on tools it has never seen.",
+    detail: "fastino/gliner2-base-v1 · LoRA, 788 rows, trains in ~4 min · held-out bench: 94.4% accuracy, 100% precision, 150 ms/row — against 89.3%, 84.3%, 890 ms for gpt-4.1-mini",
+    note: "No hand labels. Every compiled tool is replayed six times and the shipped judge's verdict is recorded; negatives are made by deleting the evidence the deterministic floor keys on, and relabelled by that floor. The bench holds out whole tools, so the number is generalisation, not memory. The encoder trades some recall for zero false positives — the right side for a judge that may uphold a rejection but never promote a guess. In distill the same base model classifies what kind of change a step was.",
+    without: "The OpenAI judge, then the keyless diff floor. Verify never stops working; it gets slower and looser.",
   },
 ];
 
