@@ -41,7 +41,7 @@ function announced(added) {
     const isBanner = /status|alert/.test(role || '') || /toast|notification/i.test(tag)
     if (!isBanner || !SUCCESS.test(label || '')) continue
     const hit = OUTCOME_VERB.find(([re]) => re.test(label))
-    return { text: label.replace(/\n/g, ' ').trim().slice(0, 80), kind: hit ? hit[1] : 'mutation' }
+    return { text: label.replace(/\n/g, ' ').trim().slice(0, 80), kind: hit ? hit[1] : 'mutation', via: 'banner' }
   }
   return null
 }
@@ -60,7 +60,9 @@ export function echoed(added, value) {
   // The field we typed into echoes trivially. Only rendered content counts:
   // seeing the value in a list item or link means the app STORED it.
   const hit = added.find((i) => !/^(input|textarea|select)\|/.test(i) && i.toLowerCase().includes(needle))
-  return hit ? { text: hit.split('|').pop().slice(0, 80), kind: 'creation' } : null
+  // `via: echo` matters downstream: the value being on screen proves a write
+  // happened, but not what kind. That is the ambiguity the vision tier resolves.
+  return hit ? { text: hit.split('|').pop().slice(0, 80), kind: 'creation', via: 'echo' } : null
 }
 
 /** Compare two snapshots. Deterministic; no API key. */
@@ -94,4 +96,148 @@ export function describe(d) {
   if (d.added.length) parts.push(`+${d.added.length}`)
   if (d.removed.length) parts.push(`-${d.removed.length}`)
   return `${d.kind} (${parts.join(' ')}) e.g. ${(d.added[0] || d.removed[0] || '').slice(0, 50)}`
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * The vision tier - fal.
+ *
+ * The DOM differ says *whether* something changed. Pioneer's encoder says what
+ * kind, from the diff text. Neither can settle a change the text does not
+ * describe: a card that moved column, a row that reordered, a control that
+ * merely lit up. distill.js flags those cases rather than guessing, and this is
+ * the tier they escalate to - pixels, once, only for the steps text could not
+ * decide.
+ *
+ * That ordering is the whole economy of it. A VLM on every step would be slow
+ * and mostly wasted, because most steps announce themselves: when the app says
+ * "The task was deleted successfully", the text IS the evidence and a
+ * screenshot adds nothing. Escalation runs on the remainder.
+ *
+ * Degrades like every other stage: no key, no frames, or a dead endpoint leaves
+ * the existing classification untouched. A blind judge must not fail a compile.
+ * ---------------------------------------------------------------------------
+ */
+import { fal } from '@fal-ai/client'
+import { config, hasKey } from './config.js'
+
+const VISION_MODEL = process.env.FAL_VISION_MODEL || 'google/gemini-2.5-flash-lite'
+const VISION_TIMEOUT_MS = Number(process.env.FAL_TIMEOUT_MS || 25000)
+
+export function visionAvailable() { return hasKey('fal') }
+
+/**
+ * A frame small enough to send by value. JPEG at q55 lands around 30-50KB for a
+ * 1440x900 viewport, which fal accepts inline as a data URI - so a judgement
+ * costs one request, not an upload plus a request.
+ */
+export async function shot(page) {
+  try {
+    const buf = await page.screenshot({ type: 'jpeg', quality: 55 })
+    return `data:image/jpeg;base64,${buf.toString('base64')}`
+  } catch { return null }
+}
+
+/**
+ * Which steps the text could not settle.
+ *
+ * An announcement is the app asserting its own outcome - authoritative, and
+ * cheaper than pixels. Anything else reached its `kind` by counting nodes, and
+ * counting is the softest inference in the compiler.
+ */
+export function needsVision(action) {
+  if (action?.perception?.escalate) return true
+  // A toast is the app naming its own outcome - authoritative, no pixels needed.
+  // An echo only proves the value landed somewhere; it always reports "creation"
+  // because that is all it can infer, which is exactly the guess worth checking.
+  if (['banner', 'reload'].includes(action?.evidence?.announced?.via)) return false
+  return true
+}
+
+const SYSTEM = 'You judge before/after screenshots of a web app. Reply with strict JSON and nothing else.'
+
+const promptFor = (action) => [
+  `An agent performed: "${action.label}".`,
+  'Image 1 is BEFORE, image 2 is AFTER.',
+  'Did the underlying application state actually change, or is the difference cosmetic (hover, focus, a menu opening) or merely navigational?',
+  'Reply JSON: {"kind":"creation|deletion|mutation|navigation|cosmetic","meaningful":true|false,"reason":"under 12 words"}',
+].join(' ')
+
+function parseVerdict(raw) {
+  if (!raw) return null
+  const m = String(raw).match(/\{[\s\S]*\}/)
+  if (!m) return null
+  try {
+    const v = JSON.parse(m[0])
+    if (!KINDS.includes(v.kind)) return null
+    return { kind: v.kind, meaningful: v.meaningful !== false, reason: String(v.reason || '').slice(0, 80) }
+  } catch { return null }
+}
+
+/** Vocabulary shared with distill.js, plus the one the DOM differ cannot express. */
+export const KINDS = ['creation', 'deletion', 'mutation', 'navigation', 'cosmetic']
+
+/** One judgement. Returns null on any failure - the caller keeps what it had. */
+export async function judge(action) {
+  const { before, after } = action.frames || {}
+  if (!before || !after) return null
+  try {
+    const res = await Promise.race([
+      fal.subscribe('fal-ai/any-llm/vision', {
+        input: {
+          model: VISION_MODEL,
+          system_prompt: SYSTEM,
+          prompt: promptFor(action),
+          image_urls: [before, after],
+          max_tokens: 200,
+        },
+      }),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('fal timeout')), VISION_TIMEOUT_MS)),
+    ])
+    return parseVerdict(res?.data?.output)
+  } catch { return null }
+}
+
+/**
+ * Escalate the unsettled steps. Mutates `action.perception` in place and returns
+ * stats for the compile log.
+ */
+export async function adjudicate(actions, { log } = {}) {
+  const stats = { source: 'none', considered: 0, judged: 0, overruled: 0, corroborated: 0, cosmetic: 0 }
+  if (!visionAvailable()) { log?.('no FAL_KEY - vision tier idle, text classification stands'); return stats }
+
+  fal.config({ credentials: config.keys.fal })
+  const cases = actions.filter((a) => needsVision(a) && a.frames?.before && a.frames?.after)
+  stats.considered = cases.length
+  if (!cases.length) { stats.source = 'fal'; return stats }
+
+  const verdicts = await Promise.all(cases.map((a) => judge(a)))
+  for (const [i, v] of verdicts.entries()) {
+    if (!v) continue
+    const a = cases[i]
+    stats.judged++
+    if (!v.meaningful || v.kind === 'cosmetic') stats.cosmetic++
+    // A drag carries its own structural proof: kanban.js watched a card leave one
+    // column and arrive in another, and replay.js re-checks exactly that. Its
+    // `relocation` is more precise than any of the five kinds here, so the
+    // verdict corroborates it rather than flattening it to `mutation`.
+    if (a.drag) {
+      stats.corroborated++
+    } else {
+      if (v.kind !== a.effect) stats.overruled++
+      a.effect = v.kind
+    }
+    a.perception = { ...(a.perception || {}), kind: v.kind, meaningful: v.meaningful, reason: v.reason, source: 'fal', escalate: false }
+  }
+  stats.source = stats.judged ? 'fal' : 'none'
+  return stats
+}
+
+export function summariseVision(s) {
+  if (s.source !== 'fal') return 'vision: idle (text classification stands)'
+  const bits = [`${s.judged}/${s.considered} escalated steps judged by fal`]
+  if (s.overruled) bits.push(`${s.overruled} reclassified`)
+  if (s.corroborated) bits.push(`${s.corroborated} drag corroborated`)
+  if (s.cosmetic) bits.push(`${s.cosmetic} found cosmetic`)
+  return `vision: ${bits.join(', ')}`
 }

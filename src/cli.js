@@ -5,6 +5,7 @@ import { gesture } from './plan.js'
 import { openSession, ensure, closeSession } from './session.js'
 import { synthesize } from './synthesize.js'
 import { distill, summarise } from './distill.js'
+import { adjudicate, summariseVision, shot, visionAvailable } from './perceive.js'
 import { checkPersistence, summarise as summarisePersistence } from './persist.js'
 import { emit } from './emit.js'
 import { config } from './config.js'
@@ -98,8 +99,15 @@ try {
     const boardUrl = await boardView(page, abs(project))
     if (boardUrl) {
       console.log(`  seed ${boardUrl.replace(config.target.url, '')} (board)`)
+      // The case distill.js had in mind: the card did not appear or disappear,
+      // it MOVED, and no amount of diff text says so. kanban.js proves it
+      // structurally and replay.js re-checks it the same way, so fal is not
+      // needed to classify the drag - it is a second, independent witness that
+      // the pixels agree, which is the one claim the DOM evidence cannot make.
+      const beforeFrame = visionAvailable() ? await shot(page) : null
       const move = await discoverMove(page, boardUrl)
       if (move) {
+        move.frames = { before: beforeFrame, after: visionAvailable() ? await shot(page) : null }
         // Canonicalise the label the same way discover.js does, so the emitted
         // tool is `moveTask` and not `moveCardBetweenColumns`.
         const g = gesture('move bucket', { scope: 'task' })
@@ -127,6 +135,14 @@ try {
   // the call fails, so this line can never break a compile.
   const perception = await distill(actions, { log: (m) => console.log(`  \x1b[33m!\x1b[0m ${m}`) })
   console.log(`  ${summarise(perception)}`)
+
+  // fal adjudicates only what the text could not settle - a card that moved
+  // column, a value that merely echoed. Toast-confirmed steps never get here.
+  const vision = await adjudicate(actions, { log: (m) => console.log(`  \x1b[33m!\x1b[0m ${m}`) })
+  console.log(`  ${summariseVision(vision)}`)
+
+  // Frames are ~40KB of base64 each and have done their job by now.
+  for (const a of actions) delete a.frames
 
   mkdirSync('out', { recursive: true })
   writeFileSync('out/actions.json', JSON.stringify(actions, null, 2))
