@@ -28,7 +28,7 @@ const PARTNERS: Partner[] = [
     name: "h",
     src: "/logos/h.svg",
     stage: "explore",
-    role: "Reads the controls the closed vocabulary refused, and names the ones that write.",
+    role: "Looks at the buttons and forms apic could not make sense of on its own, and says which of them actually change something.",
     detail: "holo3-1-35b-a3b · OpenAI-compatible inference endpoint · one JPEG of the page per seed",
     note: "An escalation tier, not the planner. gesture() maps a control's visible text to a <verb, resource> pair and returns null for everything else — that null is the precision gate, and it is also where recall goes: an icon-only button is dropped however plainly it writes. h is handed exactly that set, once per seed, and every answer is validated back against the same six verbs and four resources, so it can recover a control but never invent a verb. Measured on this target: 3 unresolved controls read, 1 named — a Kanban bucket control with no text, recovered from its icon.",
     without: "Any control the built-in noun tables cannot place is dropped, and nothing looks at it a second time.",
@@ -37,7 +37,7 @@ const PARTNERS: Partner[] = [
     name: "fal",
     src: "/logos/fal.svg",
     stage: "perceive",
-    role: "Settles whether a change was a real write or a cosmetic re-render.",
+    role: "Compares before-and-after screenshots and says whether something actually happened, or the page just redrew itself.",
     detail: "fal-ai/any-llm/vision · gemini-2.5-flash-lite · 1440×900 frame inline as a data URI",
     note: "It is an escalation tier, not a default. Steps the app already confirmed with its own success banner never reach it, so the VLM is spent only on the cases DOM text genuinely cannot settle. It runs on the CLI compile; a compile driven through compile_app on the MCP server stays on the text tier.",
     without: "The text classification stands, and a re-render can pass as a write.",
@@ -46,7 +46,7 @@ const PARTNERS: Partner[] = [
     name: "OpenAI",
     stage: "ground · verify (standby)",
     src: "/logos/openai_dark.svg",
-    role: "Turns the documentation Tavily found into a closed vocabulary, and stands behind the fine-tuned Pioneer judge as the fallback ruling on replayed tools.",
+    role: "Reads the documentation Tavily found and pulls out the words the app uses for its things — issue, repository, task — so the tools get sensible names. Also the backup judge, behind Pioneer, for whether a replayed tool really worked.",
     detail: "gpt-4.1-mini · strict JSON schema, structured output",
     note: "Not synthesise — that stage takes verb and noun off the label and JSON Schema off the fields, with no model in it at all. In verify OpenAI sits on top of the keyless diff judge and may tighten a verdict but never loosen one. It has been caught citing a filter box's own echo as independent evidence — a judge looser than the free check is worse than no judge.",
     without: "The built-in noun table stands; if the Pioneer judge is also absent, deterministic diff judging alone.",
@@ -55,16 +55,16 @@ const PARTNERS: Partner[] = [
     name: "Tavily",
     src: "/logos/tavily.svg",
     stage: "ground",
-    role: "Reads the target app's own documentation so the compiler learns that app's nouns.",
+    role: "Goes and finds the app's own documentation on the web. apic was written knowing Vikunja's words — task, project, label. Point it at Gitea and Tavily is how it learns that this app has issues, repositories and pull requests instead.",
     detail: "api.tavily.com/search · prose to a closed noun set, capped at 12, cached per host",
     note: "The built-in tables are Vikunja's words — bucket, task, label, project. Point apic at Gitea and issue, repository and pull request are terms it has never heard of. Grounding only ever adds vocabulary; it cannot remove what is already there.",
-    without: "The built-in table stands and the compile runs exactly as before.",
+    without: "apic only knows the words it was born with. Anything an app calls something else gets a worse name, or gets dropped.",
   },
   {
     name: "Pioneer",
     src: "/logos/pioneer.svg",
     stage: "verify · distill",
-    role: "A GLiNER2 encoder fine-tuned on apic's own verify evidence replaces the GPT-4.1-mini judge — and beats it on tools it has never seen.",
+    role: "A small model we trained on apic's own results. After a tool is replayed, it reads what changed on the page and decides whether the action really worked — faster than GPT-4.1-mini, and with no wrong \"yes\" answers on tools it had never seen.",
     detail: "fastino/gliner2-base-v1 · LoRA, 788 rows, trains in ~4 min · held-out bench: 94.4% accuracy, 100% precision, 150 ms/row — against 89.3%, 84.3%, 890 ms for gpt-4.1-mini",
     note: "No hand labels. Every compiled tool is replayed six times and the shipped judge's verdict is recorded; negatives are made by deleting the evidence the deterministic floor keys on, and relabelled by that floor. The bench holds out whole tools, so the number is generalisation, not memory. The encoder trades some recall for zero false positives — the right side for a judge that may uphold a rejection but never promote a guess. In distill the same base model classifies what kind of change a step was.",
     without: "The OpenAI judge, then the keyless diff floor. Verify never stops working; it gets slower and looser.",
@@ -94,9 +94,10 @@ export function Partners() {
           Five models, one decision each.
         </h2>
         <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-white/60">
-          Each stage of the compiler hands exactly one judgement to a model and keeps the rest
-          deterministic. Every one of them degrades to a working fallback — which is the point:
-          you can see precisely what each is buying.
+          apic is mostly ordinary code. At five points it needs a judgement call — what to click,
+          did that work, what is this thing called — and each of those is handed to exactly one
+          model. Take any of them away and apic still runs, just a bit blinder. The plain-English
+          job comes first; the exact call underneath it is there so the claim can be checked.
         </p>
 
         <ul className="mt-14">
