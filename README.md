@@ -218,6 +218,22 @@ docker run -d --name vikunja -p 3456:3456 -v vikunja-files:/app/vikunja/files \
 | `npm run score` | Recall and precision against the target's real API |
 | `npm run serve` | Run **apic itself** as an MCP server — see below |
 
+Every command reads the same two variables, so a whole run can be pointed at an
+alternative bundle without touching the live one:
+
+```bash
+APIC_OUT_DIR=out/rescue APIC_APP=vikunja npm run verify
+```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `APIC_OUT_DIR` | `generated` | Where compiled bundles live. `APIC_GENERATED` is accepted as an alias |
+| `APIC_APP` | `vikunja` | Which bundle inside it |
+| `TARGET_URL` | `http://localhost:3456` | The app being compiled |
+| `TARGET_USER` / `TARGET_PASS` | `apic` / — | Credentials for the target |
+| `TARGET_LOGIN_PATH` | discovered | Only needed when the login form is not on a `/login`-style path |
+| `APIC_SEEDS` | `/projects,/labels` | Pages to start exploring from |
+
 Seeds and target are environment-driven — nothing in the compiler knows
 Vikunja's routes:
 
