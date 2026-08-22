@@ -72,10 +72,15 @@ export async function discoverInline(page, seedUrl, { onStep } = {}) {
   // named by the control that commits it. ParaBank's open-account form is two
   // unlabelled selects and a button reading "Open New Account".
   const commit = await submitButton(page)
+  // An app names its own actions in its page heading. ParaBank's fields carry
+  // no labels and its commit control reads only "Transfer", but the h1 says
+  // "Transfer Funds" and "Apply for a Loan". Third fallback, cheapest last.
+  const heading = await page.evaluate(() => (document.querySelector('h1')?.innerText || '').trim().slice(0, 60)).catch(() => '')
   const found = []
   for (const f of present) {
     const g = gesture(f.label || f.placeholder || '', { scope })
       || (commit ? gesture(commit.label, { scope }) : null)
+      || (heading ? gesture(heading, { scope }) : null)
     if (!g) continue
 
     await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => {})
@@ -110,6 +115,10 @@ export async function discoverInline(page, seedUrl, { onStep } = {}) {
       d = diff(before, afterSnap, used.value)
     }
     const control = (live.label || live.placeholder || 'submit').replace(/…$/, '').trim()
+    // The inline path had no stability check at all, and it is the path most
+    // likely to run against an empty collection - which is exactly the state a
+    // freshly cleaned demo target is in.
+    const fieldStable = await fieldResolves(page, seedUrl, live.selectors?.length ? live.selectors : [live.selector])
     const step = record({
       g, control, d, seedUrl,
       parameters: [{ ...live, example: used.value }],
@@ -119,7 +128,8 @@ export async function discoverInline(page, seedUrl, { onStep } = {}) {
         frames: { before: beforeFrame, after: await frame(page) },
       },
     })
-    if (d.changed) found.push(step)
+    step.evidence.controlStable = fieldStable
+    if (d.changed && fieldStable !== false) found.push(step)
     onStep?.(step, d)
   }
   return found
@@ -234,6 +244,20 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
     const afterFrame = await frame(page)
     const d = diff(before, afterSnap, used[0]?.value)
     const controlStable = await stillResolves(page, seedUrl, [label, ...(handles || [])])
+
+    // A dead control is only fatal when the fields it was meant to reveal are
+    // unreachable without it - which is exactly the rule replay.js already
+    // applies at execution time, and the two disagreeing would be worse than
+    // either being wrong alone. createProject's fields sit behind a modal, so
+    // losing its opener loses the tool; a quick-add box is on the page whatever
+    // the collection contains, so losing a stale call-to-action costs nothing
+    // and executing the tool still proves it works.
+    let fieldsReachable = null
+    if (controlStable === false && used.length) {
+      const sels = used.flatMap((u) => (u.selectors?.length ? u.selectors : [u.selector])).filter(Boolean)
+      fieldsReachable = sels.length ? await fieldResolves(page, seedUrl, sels) : null
+    }
+
     const step = record({
       g, control: label, handles, d, seedUrl, planner: classified.has(label) ? 'h' : 'heuristic',
       parameters: used.map(({ name, label: l, placeholder, type, required, value, selector, selectors }) =>
@@ -241,11 +265,14 @@ export async function discoverOn(page, seedUrl, { skipDestructive = true, onStep
       extra: { frames: { before: beforeFrame, after: afterFrame } },
     })
     step.evidence.controlStable = controlStable
+    step.evidence.fieldsReachable = fieldsReachable
     step.committed = committed
-    // A control that no longer resolves once the action has run cannot be
-    // clicked again, so a tool minted from it is a false positive: true at
-    // compile time, unreplayable forever after. Reported, then dropped.
-    if (d.changed && controlStable !== false) found.push(step)
+    // Dropped only when the control is gone AND nothing can reach the fields
+    // without it. Replaying a tool is better evidence than a capture-time guess
+    // about whether a button stayed put, so when the fields are still reachable
+    // the action is kept and verification gets to rule on it.
+    const unusable = controlStable === false && fieldsReachable !== true
+    if (d.changed && !unusable) found.push(step)
     onStep?.(step, d)
   }
   return found
@@ -422,19 +449,48 @@ const CLICKABLE = 'main button:visible, main a[href]:visible, main [role="button
  * evidence rather than acted on, because the same signal fires for controls
  * that are legitimately conditional.
  */
-async function stillResolves(page, seedUrl, tries) {
+/**
+ * Reload the seed and say whether the page can be trusted to answer at all.
+ * Returns false when it cannot - the caller must then report null, never false.
+ */
+async function reloadTrustworthy(page, seedUrl) {
   let loaded = true
   await page.goto(seedUrl, { waitUntil: 'domcontentloaded' }).catch(() => { loaded = false })
   await page.waitForTimeout(600)
+  if (!loaded) return false
+  if (page.url().includes('/login')) return false // session dropped mid-compile
+  return true
+}
 
+/**
+ * The inline sibling of stillResolves().
+ *
+ * An inline recipe never clicks anything - it fills a field that is already on
+ * the page - so the thing that must survive is the FIELD, not a control. Asking
+ * stillResolves() about it would be asking the wrong question with the wrong
+ * locators: it hunts buttons and links, and would report every healthy quick-add
+ * box as unstable, dropping createTask and costing recall to "fix" a bug that
+ * was not there.
+ *
+ * Same tri-state discipline: only an explicit false rejects.
+ */
+async function fieldResolves(page, seedUrl, selectors) {
+  if (!(await reloadTrustworthy(page, seedUrl))) return null
+  let errored = false
+  for (const sel of (selectors || []).filter(Boolean)) {
+    try { if (await page.locator(`${sel}:visible`).count()) return true } catch { errored = true }
+  }
+  return errored ? null : false
+}
+
+async function stillResolves(page, seedUrl, tries) {
   // Tri-state, for the reason persist.js already states: a probe that fails
   // proves nothing either way, so never reject a tool on the strength of a page
   // that would not load. Collapsing "could not tell" into "does not resolve"
   // rejects, and a rejection here is not local - dropping create-project leaves
   // no project to descend into, so the entire task branch goes with it. One
   // expired session cost a compile 7 of its 9 tools.
-  if (!loaded) return null
-  if (page.url().includes('/login')) return null // session dropped mid-compile
+  if (!(await reloadTrustworthy(page, seedUrl))) return null
 
   let errored = false
   const count = async (sel) => {
