@@ -1,0 +1,72 @@
+{
+  "app": "parabank",
+  "target": "http://localhost:8080/parabank",
+  "generatedBy": "apic",
+  "tools": [
+    {
+      "name": "createAccount",
+      "description": "create account. Confirmed: the submitted value appeared in the app after the action.",
+      "destructive": false,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "type"
+          }
+        },
+        "required": []
+      },
+      "recipe": {
+        "seedUrl": "http://localhost:8080/parabank/openaccount.htm",
+        "click": "create account",
+        "fields": [
+          {
+            "selector": "#type",
+            "name": "type",
+            "schemaKey": "type"
+          }
+        ],
+        "submit": true,
+        "expect": "cosmetic"
+      },
+      "provenance": {
+        "evidence": {
+          "control": "submit",
+          "controls": [
+            "submit"
+          ],
+          "added": [
+            "h1||Account Opened!",
+            "a||14232"
+          ],
+          "removed": [
+            "h1||Open New Account",
+            "select||CHECKING\nSAVINGS",
+            "select||12345\n12456\n12567\n12678\n12789\n12900\n13011\n13122\n13233\n13344\n"
+          ],
+          "from": "/parabank/openaccount.htm",
+          "to": "/parabank/openaccount.htm",
+          "announced": {
+            "text": "Account Opened!",
+            "kind": "mutation",
+            "via": "banner"
+          },
+          "controlStable": true
+        },
+        "perception": {
+          "kind": "cosmetic",
+          "confidence": null,
+          "source": "fal",
+          "heuristicKind": "mutation",
+          "escalate": false,
+          "entities": [],
+          "inferenceId": "ed618871-5010-47d0-90d8-214c293ede61",
+          "meaningful": false,
+          "reason": "No visible change occurred between screenshots."
+        },
+        "discoveredBy": "heuristic"
+      }
+    }
+  ]
+}

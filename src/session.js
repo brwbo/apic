@@ -58,11 +58,29 @@ async function clearCredentials(session) {
   await session.context.clearCookies().catch(() => {})
 }
 
+/**
+ * Optional window placement, for filming a headed compile beside the agent that
+ * launched it. Off unless APIC_WINDOW is set, so every existing caller keeps
+ * the 1440x900 headless context it had.
+ *
+ * The viewport is sized to the window rather than left null: with viewport:null
+ * a headed page.screenshot can hang the full 30s in "waiting for fonts to load",
+ * and perceive.js screenshots on every step of a compile.
+ */
+const WINDOW = process.env.APIC_WINDOW || null
+const [WIN_W, WIN_H] = (WINDOW || '1440x900').split('x').map(Number)
+const [WIN_X, WIN_Y] = (process.env.APIC_WINDOW_POS || '0,0').split(',').map(Number)
+const CHROME_H = Number(process.env.APIC_WINDOW_CHROME || 88) // toolbar + tab strip
+
 /** Browser + context + page, with any stored session already applied. */
 export async function openSession({ headless = true, state = STATE } = {}) {
-  const browser = await chromium.launch({ headless })
+  const placed = Boolean(WINDOW) && !headless
+  const browser = await chromium.launch({
+    headless,
+    args: placed ? [`--window-position=${WIN_X},${WIN_Y}`, `--window-size=${WIN_W},${WIN_H}`] : [],
+  })
   const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
+    viewport: placed ? { width: WIN_W, height: Math.max(400, WIN_H - CHROME_H) } : { width: 1440, height: 900 },
     storageState: isFresh(state) ? state : undefined,
   })
   const page = await context.newPage()

@@ -34,7 +34,7 @@ a function call.
 
 | Stage | Does | Tech |
 |---|---|---|
-| **Explore** | Drives the app, ranks affordances so create actions go first, opens forms and submits them | Playwright (h integrated, [not reached](#what-doesnt-work-yet)) |
+| **Explore** | Drives the app, ranks affordances so create actions go first, opens forms and submits them | Playwright + [h](#partner-technologies) (escalation tier for controls the vocabulary can't name) |
 | **Perceive** | Decides whether anything meaningful changed | DOM diff, escalating to fal on the CLI path |
 | **Synthesise** | Turns a trajectory into a typed tool schema | deterministic — no model call |
 | **Verify** | Replays the tool cold with arguments the app has never seen | keyless judge + OpenAI |
@@ -73,19 +73,38 @@ and replay re-resolves it live, falling back to a stable-first selector chain
 ## Results
 
 Compiled from the UI. **The target's OpenAPI spec is never read during
-compilation** — it's used only as ground truth for scoring, which is why the
-recall number means something.
+compilation** — it is used only as ground truth for scoring, which is why the
+recall number means anything at all.
+
+**The denominator, stated before the number:** 18 is every write operation
+(`POST`/`PUT`/`DELETE`) on `/projects`, `/tasks` and `/labels` in Vikunja's own
+OpenAPI spec, after removing what is not a board gesture — teams, project-level
+permissions, link sharing, attachments, task relations, duplication, bulk
+endpoints and read receipts. Vikunja publishes 105 write operations in total;
+18 is the subset a person can perform on a Kanban board, and each emitted tool
+may claim at most one of them, so recall cannot be inflated by loose matching.
 
 ```
-RECALL     8/18    board write-ops discovered
-PRECISION  9/9     emitted tools that are real
-VERIFIED   8/9     survived a cold replay with unseen arguments
+RECALL     8/18    of the board write-ops in the target's own API
+PRECISION  9/9     emitted tools that map to a real operation
+VERIFIED   9/9     survived a cold replay with arguments never seen before
 ```
 
-Nine tools discovered, eight served. `markTask` is rejected and kept in
-`tools.json` with `verified: false` — **a rejected tool is evidence about the
-compiler, not garbage.** Marking a task done produces no banner and echoes no
-argument, so nothing confirms the write, and an unconfirmed tool is not served.
+Nine tools discovered, nine served. Rejected tools are not deleted — they stay
+in `tools.json` with `verified: false`, because **a rejected tool is evidence
+about the compiler, not garbage.**
+
+**`markTask` is flaky and that is worth more than the 9/9.** Two consecutive
+verify runs against the same bundle, no changes in between, gave 8/9 then 9/9:
+it failed with *"observed mutation but nothing confirmed a write"* and then
+passed with *"Success — the task was saved successfully."* The likely cause is
+the seeded task's state — land on one already done and the control reads MARK AS
+UNDONE and confirms differently. It takes no parameters, so it cannot
+disambiguate by argument either.
+
+That is a **live instance of the flake-vs-drift problem** listed below as
+unsolved: `watch` would count that failure as drift and call `heal`, when
+nothing drifted at all.
 
 Continuous verification over a live afternoon:
 
@@ -111,7 +130,7 @@ which is what the status column records.
 |---|---|---|---|
 | **OpenAI** | Verify | An independent verdict on whether the predicted effect occurred, layered on the keyless diff floor. It can uphold a rejection, never overturn one | **in use** — it ruled on the one tool `verify` rejected |
 | **fal** | Perceive | Fast VLM for meaningful-vs-cosmetic judgement, escalated to only when the DOM diff is ambiguous | **in use** — 4/4 escalated steps judged last compile, 2 of them ruled cosmetic. CLI path only; `compile_app` does not escalate |
-| **Pioneer** | Distil | Small classifier over the diff text — state change, destructiveness, domain nouns. One batched call per compile | **blocked** — `403 payment_method_required`; perception falls back to the heuristic |
+| **Pioneer** | Distil | Small classifier over the diff text — state change, destructiveness, domain nouns. One batched call per compile | **blocked all day** — `403 payment_method_required`, later `401 Invalid API key`; perception falls back to the heuristic |
 | **h** | Explore | Reads the page and names the write actions the keyless vocabulary refused | **in use** — runs once per seed on the leftovers; names 0 of 3 on Vikunja, correctly |
 | **Tavily** | Ground | App documentation → domain vocabulary, so tools are named `createIssue`, not `btn_submit_2` | **not built** — declared in `config.js` and `doctor.js`, never implemented |
 
@@ -137,11 +156,31 @@ offered, because excluding `ADD TO FAVORITES` is a scoping decision and not a
 gap for a model to fill. And a classified control still has to make the app
 confirm a write like every other candidate.
 
-*Measured:* h reads the three controls the vocabulary leaves unresolved on
-Vikunja's task page and names **none** of them — correctly; they are not
-writes. It is in the path, it is logged (`h read 3 unresolved controls, named
-0`), and on this target it has nothing to add. Without the key the compile is
-byte-identical.
+*Measured, on the compile this README reports:* h reads the three controls the
+vocabulary leaves unresolved on Vikunja's task page and names **one** of them —
+an icon-only control the regexes drop outright:
+
+```
+! h read 3 unresolved controls, named 1
+! h: "Kanban bucket: To-Do" -> move task (Pencil icon allows changing task status)
+```
+
+That is the escalation tier doing the job it exists for: a control with no
+leading verb and no usable text, recovered from its icon and mapped into the
+closed vocabulary.
+
+**It did not add a tool, and we are not claiming it did.** `move task` had
+already been found twice by then — once by the board drag (`Move card between
+columns`), once by the task page's bucket dropdown (`Kanban bucket: Doing`) —
+so h's answer deduplicated into the `moveTask` that the drag produced. On this
+target h is corroboration, not recall: a third independent route to an action
+two other routes already reached. An earlier revision of this file said h was
+never reached and named none; both were wrong.
+
+Whether h *adds* recall is untested here, because Vikunja's writes are unusually
+well-labelled. The case it is built for — an app whose buttons are icons — is
+exactly the case this target does not present. Without the key the compile
+loses that corroboration and nothing else.
 
 **fal — `google/gemini-2.5-flash-lite` via `fal-ai/any-llm/vision`.**
 The DOM differ says *whether* the page changed. It cannot settle a change the
@@ -162,10 +201,9 @@ first, then the model. **The model can uphold a rejection and never overturn
 one** — a tool the diff could not confirm stays rejected however confident the
 judge is.
 
-*Measured:* `markTask` is the tool that failed verification, and its record
-reads `openai/gpt-4.1-mini disagreed but cannot overturn a rejection`. That
-asymmetry is deliberate: a judge that can promote its own guesses is a
-precision leak.
+*Measured:* on the run where `markTask` failed, its record reads
+`openai/gpt-4.1-mini disagreed but cannot overturn a rejection`. That asymmetry
+is deliberate: a judge that can promote its own guesses is a precision leak.
 
 **Pioneer — GLiNER2 (`fastino/gliner2-base-v1`), one batched `POST /inference`.**
 [`distill.js`](src/distill.js) sends the whole trajectory's diff text in a
@@ -217,6 +255,22 @@ docker run -d --name vikunja -p 3456:3456 -v vikunja-files:/app/vikunja/files \
 | `npm run watch` | Continuous verification with automatic repair |
 | `npm run score` | Recall and precision against the target's real API |
 | `npm run serve` | Run **apic itself** as an MCP server — see below |
+
+Every command reads the same two variables, so a whole run can be pointed at an
+alternative bundle without touching the live one:
+
+```bash
+APIC_OUT_DIR=out/rescue APIC_APP=vikunja npm run verify
+```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `APIC_OUT_DIR` | `generated` | Where compiled bundles live. `APIC_GENERATED` is accepted as an alias |
+| `APIC_APP` | `vikunja` | Which bundle inside it |
+| `TARGET_URL` | `http://localhost:3456` | The app being compiled |
+| `TARGET_USER` / `TARGET_PASS` | `apic` / — | Credentials for the target |
+| `TARGET_LOGIN_PATH` | discovered | Only needed when the login form is not on a `/login`-style path |
+| `APIC_SEEDS` | `/projects,/labels` | Pages to start exploring from |
 
 Seeds and target are environment-driven — nothing in the compiler knows
 Vikunja's routes:
@@ -312,16 +366,23 @@ Stated plainly, because a compiler that hides its failure modes isn't one.
 - **fal escalation is CLI-only.** `adjudicate()` runs from `cli.js`, not
   `compile.js`, so a compile driven through `compile_app` on the MCP server
   never reaches the vision tier.
-- **Pioneer returns 403** and perception falls back to the heuristic. Each
+- **Pioneer was unavailable all day** — `403 payment_method_required`, then
+  `401 Invalid API key` on the same untouched key a few hours later — so
+  perception falls back to the heuristic. Each
   integration was written to degrade silently, and each did — the degradation
   is the intended behaviour; not noticing for a whole afternoon is not.
 - **Only one app has been compiled end to end.** A second target (Gitea)
   authenticates through the same discovered login with no configuration, but
   discovery returns zero candidates there. Unresolved.
 - **8/18 recall.** Missing: bucket creation, comments, relations and attachments.
-- **`markTask` fails verification.** The effect is observed and correct, but
-  toggling a checkbox produces no banner and echoes no argument, so nothing
-  independently confirms the write. It stays rejected rather than served.
+- **`markTask` fails roughly one run in two** (see Results). The effect is real
+  and observed; whether anything *confirms* it depends on the task's existing
+  state. Any live `npm run verify` should be expected to print 8/9 or 9/9.
+- **Concurrent runs collide.** Every command shares one stored session at
+  `.apic/session.json`, so a compile and a verify started together can destroy
+  each other's browser context mid-run (`Error setting storage state: Execution
+  context was destroyed`). Pass a distinct `APIC_SESSION` per run as a
+  workaround; the real fix is a per-run session file by default.
 - **Watch treats every failure as drift.** Real flake-vs-drift classification
   doesn't exist. Three false-positive classes were fixed by hand — rate
   limiting, token expiry, and a crashed page — but the general problem stands.
@@ -332,8 +393,6 @@ Stated plainly, because a compiler that hides its failure modes isn't one.
   degrade the target until it's reset.
 - **Auth is sidestepped.** One login, one user, no permission scopes — which is
   the hard part of the problem in real enterprise software.
-- **Pioneer is blocked** on an account credits error, so the SLM classifier is
-  idle and perception falls back to the heuristic.
 
 ## Prior work declaration
 

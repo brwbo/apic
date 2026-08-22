@@ -38,8 +38,8 @@ create project. Confirmed by the app: "Success The project was successfully crea
     "NEW PROJECT"
   ],
   "added": [
-    "li||apic probe 9862\nMark this project as favorite\nOpen project s",
-    "a||apic probe 9862",
+    "li||apic probe 85217\nMark this project as favorite\nOpen project ",
+    "a||apic probe 85217",
     "a||List"
   ],
   "removed": [
@@ -48,7 +48,7 @@ create project. Confirmed by the app: "Success The project was successfully crea
     "a||NEW PROJECT"
   ],
   "from": "/projects",
-  "to": "/projects/56/225",
+  "to": "/projects/68/273",
   "announced": {
     "text": "Success The project was successfully created.",
     "kind": "creation",
@@ -85,7 +85,7 @@ create label. Confirmed by the app: "Success The label was successfully created.
     "NEW LABEL"
   ],
   "added": [
-    "a||apic probe 15949",
+    "a||apic probe 94489",
     "div|status|Success\nThe label was successfully created."
   ],
   "removed": [],
@@ -112,10 +112,6 @@ update label. Confirmed by the app: "Success The label was successfully updated.
     "v3": {
       "type": "string",
       "description": "Title"
-    },
-    "description": {
-      "type": "string",
-      "description": "Description"
     }
   },
   "required": []
@@ -131,12 +127,12 @@ update label. Confirmed by the app: "Success The label was successfully updated.
     "Edit Label"
   ],
   "added": [
-    "a||apic probe 21960",
+    "a||apic probe 375",
     "button||Close",
     "input||The label title goes here…"
   ],
   "removed": [
-    "a||apic probe 15949"
+    "a||apic probe 49395"
   ],
   "from": "/labels",
   "to": "/labels",
@@ -176,14 +172,14 @@ create task. Confirmed: the submitted value appeared in the app after the action
     "Add a task"
   ],
   "added": [
-    "input||Mark 'apic probe 31880' as done",
-    "a||apic probe 31880"
+    "input||Mark 'apic probe 32491' as done",
+    "a||apic probe 32491"
   ],
   "removed": [],
-  "from": "/projects/56/225",
-  "to": "/projects/56/225",
+  "from": "/projects/68/273",
+  "to": "/projects/68/273",
   "announced": {
-    "text": "apic probe 31880",
+    "text": "apic probe 32491",
     "kind": "creation",
     "via": "echo"
   }
@@ -220,13 +216,13 @@ move task. Confirmed: the submitted value appeared in the app after the action.
 ```json
 {
   "announced": {
-    "text": "\"#2 apic probe 31880\" moved from To-Do to Doing",
+    "text": "\"#2 apic probe 32491\" moved from To-Do to Doing",
     "kind": "relocation"
   },
   "added": [],
   "removed": [],
-  "from": "http://localhost:3456/projects/56/228",
-  "to": "http://localhost:3456/projects/56/228",
+  "from": "http://localhost:3456/projects/68/276",
+  "to": "http://localhost:3456/projects/68/276",
   "control": "Move card between columns",
   "controls": [
     "Move card between columns"
@@ -262,10 +258,10 @@ update task. Confirmed: the submitted value appeared in the app after the action
   ],
   "added": [],
   "removed": [],
-  "from": "/tasks/117",
-  "to": "/tasks/117",
+  "from": "/tasks/160",
+  "to": "/tasks/160",
   "announced": {
-    "text": "reloaded and the title is still \"apic probe 45253\"",
+    "text": "reloaded and the title is still \"apic probe 45912\"",
     "kind": "mutation",
     "via": "reload"
   }
@@ -301,8 +297,8 @@ mark task. Confirmed by the app: "Success The task was saved successfully. UNDO"
   "removed": [
     "button||MARK TASK DONE!"
   ],
-  "from": "/tasks/117",
-  "to": "/tasks/117",
+  "from": "/tasks/160",
+  "to": "/tasks/160",
   "announced": {
     "text": "Success The task was saved successfully. UNDO",
     "kind": "mutation",
@@ -338,13 +334,13 @@ assign label. Confirmed by the app: "Success The label has been created and adde
     "ADD LABELS"
   ],
   "added": [
-    "button||Remove label apic probe 61947",
+    "button||Remove label apic probe 65731",
     "input|combobox|Type to add a label…",
     "div|status|Success\nThe label has been created and added successfully."
   ],
   "removed": [],
-  "from": "/tasks/117",
-  "to": "/tasks/117",
+  "from": "/tasks/160",
+  "to": "/tasks/160",
   "announced": {
     "text": "Success The label has been created and added successfully.",
     "kind": "creation",
@@ -391,8 +387,8 @@ delete task. Confirmed by the app: "Success The task has been deleted successful
     "button||#2",
     "h1||Title"
   ],
-  "from": "/tasks/117",
-  "to": "/projects/56/228",
+  "from": "/tasks/160",
+  "to": "/projects/68/276",
   "announced": {
     "text": "Success The task has been deleted successfully.",
     "kind": "deletion",

@@ -106,6 +106,13 @@ const GESTURE_VERB = [
   [/^(move|drag|drop)\b/i, 'move'],
   [/^(assign)\b/i, 'assign'],
   [/^(mark|toggle|complete)\b/i, 'mark'],
+  // Appended for ParaBank. Banking apps name their writes with domain verbs -
+  // "Open New Account", "Transfer", "Request Loan" - none of which are
+  // create/update/delete in surface form even though that is what they do.
+  // Appended rather than merged so the Vikunja path is bit-for-bit unchanged.
+  [/^(open)\b/i, 'create'],
+  [/^(transfer|send|pay|deposit|withdraw)\b/i, 'submit'],
+  [/^(request|apply|order|book|schedule)\b/i, 'submit'],
 ]
 
 /**
