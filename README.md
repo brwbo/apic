@@ -110,18 +110,82 @@ which is what the status column records.
 | Tech | Stage | Why it earns its place | Status |
 |---|---|---|---|
 | **OpenAI** | Verify | An independent verdict on whether the predicted effect occurred, layered on the keyless diff floor. It can uphold a rejection, never overturn one | **in use** — it ruled on the one tool `verify` rejected |
-| **fal** | Perceive | Fast VLM for meaningful-vs-cosmetic judgement, escalated to only when the DOM diff is ambiguous | **CLI path only** — `adjudicate()` is called from `cli.js`, not `compile.js`, so a compile driven through the MCP server never escalates |
+| **fal** | Perceive | Fast VLM for meaningful-vs-cosmetic judgement, escalated to only when the DOM diff is ambiguous | **in use** — 4/4 escalated steps judged last compile, 2 of them ruled cosmetic. CLI path only; `compile_app` does not escalate |
 | **Pioneer** | Distil | Small classifier over the diff text — state change, destructiveness, domain nouns. One batched call per compile | **blocked** — `403 payment_method_required`; perception falls back to the heuristic |
-| **h** | Explore | Computer-use model choosing the next gesture from a screenshot. Playwright is the keyless fallback | **not reached** — `plan.js` exports `nextLabel()` and nothing calls it |
+| **h** | Explore | Reads the page and names the write actions the keyless vocabulary refused | **in use** — runs once per seed on the leftovers; names 0 of 3 on Vikunja, correctly |
 | **Tavily** | Ground | App documentation → domain vocabulary, so tools are named `createIssue`, not `btn_submit_2` | **not built** — declared in `config.js` and `doctor.js`, never implemented |
-
-**So the results below were produced keyless**, with an OpenAI judge on the
-verify pass. They are the deterministic pipeline's numbers, not a demonstration
-of the partner stack.
 
 The two-tier split is the product's own thesis applied to itself: **fal is the
 cheap high-frequency perception layer, OpenAI is the expensive low-frequency
 reasoning layer.** Escalate on failure, not on every call.
+
+### How each one is actually called
+
+**h — `holo3-1-35b-a3b`, `api.hcompany.ai/v1` (OpenAI-compatible).**
+`gesture()` maps a control's visible text to a `<verb, resource>` pair with
+regexes and returns `null` for everything else. That null is the precision gate
+and it is also where recall goes: an icon-only button, a control that does not
+lead with a verb, or an app whose wording the vocabulary never anticipated is
+dropped however plainly it writes. h is the escalation tier for exactly that
+set — [`discover.js`](src/discover.js) `classify()` sends a JPEG of the page and
+the refused controls, once per seed, and asks which of them write.
+
+Three things stop that costing precision. Answers are validated against the
+closed vocabulary — six verbs, four resources — by `plan.gestureFrom()`, so an
+invented verb cannot name a tool. Off-slice controls are withheld rather than
+offered, because excluding `ADD TO FAVORITES` is a scoping decision and not a
+gap for a model to fill. And a classified control still has to make the app
+confirm a write like every other candidate.
+
+*Measured:* h reads the three controls the vocabulary leaves unresolved on
+Vikunja's task page and names **none** of them — correctly; they are not
+writes. It is in the path, it is logged (`h read 3 unresolved controls, named
+0`), and on this target it has nothing to add. Without the key the compile is
+byte-identical.
+
+**fal — `google/gemini-2.5-flash-lite` via `fal-ai/any-llm/vision`.**
+The DOM differ says *whether* the page changed. It cannot settle a change the
+text does not describe — a card that moved column, a control that merely lit
+up. [`perceive.js`](src/perceive.js) `adjudicate()` escalates those steps, and
+only those, to pixels.
+
+*Measured, from the last full compile:* `vision: 4/4 escalated steps judged by
+fal, 1 drag corroborated, 2 found cosmetic`. The two cosmetic verdicts are the
+interesting half — fal removing candidates that would otherwise have been
+probed as writes. It runs from `cli.js`; a compile driven through `compile_app`
+on the MCP server does not escalate.
+
+**OpenAI — `gpt-4.1-mini`, structured output.**
+[`verify.js`](src/verify.js) replays every emitted tool cold with arguments the
+app has never seen, and judges the result twice: a deterministic diff floor
+first, then the model. **The model can uphold a rejection and never overturn
+one** — a tool the diff could not confirm stays rejected however confident the
+judge is.
+
+*Measured:* `markTask` is the tool that failed verification, and its record
+reads `openai/gpt-4.1-mini disagreed but cannot overturn a rejection`. That
+asymmetry is deliberate: a judge that can promote its own guesses is a
+precision leak.
+
+**Pioneer — GLiNER2 (`fastino/gliner2-base-v1`), one batched `POST /inference`.**
+[`distill.js`](src/distill.js) sends the whole trajectory's diff text in a
+single call and gets back a state-change class, a destructive flag and the
+domain nouns, above a 0.6 confidence threshold. A completed training-job id in
+`PIONEER_MODEL` swaps the base encoder for a checkpoint fine-tuned on apic's own
+labels — the system compiling its own perception layer — and nothing else
+changes.
+
+*Currently blocked:* `403 payment_method_required`. Every compile logs it and
+falls back to the node-count heuristic, which is why the emitted tools record
+`"discoveredBy": "heuristic"`.
+
+**Tavily — not built.** The `ground` stage is declared in `config.js` and
+reported by `doctor.js`, and no implementation was written.
+
+**So the recall figures above were produced keyless**, with fal on the
+escalated perception steps and an OpenAI judge on the verify pass. They are not
+a demonstration of the full partner stack, and this README will not pretend
+otherwise.
 
 ## Setup
 
@@ -240,11 +304,17 @@ spec. apic reads the app.
 
 Stated plainly, because a compiler that hides its failure modes isn't one.
 
-- **Three partner integrations are not contributing.** `h` is wired and never
-  called; `fal` escalation runs on the CLI path but not through `compile_app`;
-  Pioneer returns 403. Each was written to degrade silently, and each did — the
-  compiles that produced the numbers above ran keyless. The degradation is the
-  intended behaviour; not noticing for a whole afternoon is not.
+- **h is in the path and contributes nothing on this target.** It reads the
+  controls the vocabulary refused and correctly names none of them, because
+  Vikunja's board slice is already covered by the regexes. The escalation is
+  real and measured; the gain is zero here, and a target whose controls are
+  icons rather than verb phrases is the case that would show it.
+- **fal escalation is CLI-only.** `adjudicate()` runs from `cli.js`, not
+  `compile.js`, so a compile driven through `compile_app` on the MCP server
+  never reaches the vision tier.
+- **Pioneer returns 403** and perception falls back to the heuristic. Each
+  integration was written to degrade silently, and each did — the degradation
+  is the intended behaviour; not noticing for a whole afternoon is not.
 - **Only one app has been compiled end to end.** A second target (Gitea)
   authenticates through the same discovered login with no configuration, but
   discovery returns zero candidates there. Unresolved.
