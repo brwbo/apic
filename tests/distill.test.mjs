@@ -83,9 +83,11 @@ test('no key: falls back to the heuristic without calling out', async () => {
   assert.match(summarise(stats), /SLM classifier idle/)
 })
 
-test('a confident classification overrules the node count', async () => {
+test('a confident classification overrules a bare node count', async () => {
   stubFetch({ result: [{ classifications: { state_change: [{ label: 'creation', score: 0.93 }], destructive: [{ label: 'safe', score: 0.99 }] }, entities: [{ text: 'project', label: 'object_type', score: 0.8 }] }], inference_id: 'inf_1', latency_ms: 41, model_used: 'fastino/gliner2-base-v1' })
-  const acts = [action()]
+  // No announcement: the heuristic is only counting DOM nodes, so the encoder
+  // is the better guess and is allowed to win.
+  const acts = [action({ evidence: { added: [], removed: [], from: '/a', to: '/b', announced: null } })]
   const stats = await distill(acts)
 
   assert.equal(stats.source, 'pioneer')
@@ -95,6 +97,22 @@ test('a confident classification overrules the node count', async () => {
   assert.equal(acts[0].perception.heuristicKind, 'mutation')
   assert.equal(acts[0].perception.inferenceId, 'inf_1')
   assert.deepEqual(acts[0].perception.entities, [{ text: 'project', label: 'object_type', confidence: 0.8 }])
+})
+
+test('it may not overrule the app\'s own announcement, however confident', async () => {
+  // Measured against the live model: "Success The task was saved successfully.
+  // UNDO" comes back as `deletion` at 0.988. The app said it saved. Accepting
+  // the encoder would write `deletion` into recipe.expect and fail a tool that
+  // works, and no threshold rescues you from 0.988.
+  stubFetch({ result: [{ state_change: [{ label: 'deletion', score: 0.988 }] }] })
+  const acts = [action({ effect: 'mutation' })] // fixture carries an announcement
+  const stats = await distill(acts)
+
+  assert.equal(acts[0].effect, 'mutation', 'the deterministic effect must stand')
+  assert.equal(stats.contested, 1)
+  assert.equal(stats.disagreed, 0)
+  assert.equal(acts[0].perception.contested, true)
+  assert.equal(acts[0].perception.escalate, true, 'a contradiction is exactly what the vision tier is for')
 })
 
 test('below threshold the heuristic stands and the step is flagged to escalate', async () => {

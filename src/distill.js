@@ -26,7 +26,10 @@ import { config, hasKey } from './config.js'
 import { writeFileSync, mkdirSync } from 'node:fs'
 
 /** Same vocabulary perceive.js already uses, plus the one it cannot express. */
-export const KINDS = ['creation', 'deletion', 'mutation', 'navigation', 'cosmetic']
+export const KINDS = ['creation', 'deletion', 'mutation', 'navigation', 'relocation', 'cosmetic']
+// `relocation` is what the kanban drag path in kanban.js emits. Without it in
+// the label set the model cannot express the right answer for a drag even when
+// it knows it, so those actions could only ever abstain or be wrong.
 
 /**
  * Three heads in one call. `state_change` replaces the node-count guess,
@@ -123,24 +126,62 @@ function search(node, key, depth = 0) {
   return null
 }
 
-/** Batch inference is one request per compile, not one per step. */
-export async function classify(texts) {
+/**
+ * One request per step, deliberately - batching was measured and it is unsafe.
+ *
+ * Sending the trajectory as an array costs one call instead of eleven, and the
+ * saving is real: ~160 tokens at $0.15/M. It also corrupts the answers. The
+ * same string, "Success The project was successfully created.", classifies as
+ * creation 0.777 on its own, creation 1.000 at position 0 of a batch, and
+ * DELETION 0.600 at position 2 of the same batch reversed. The encoder is
+ * reading its neighbours.
+ *
+ * 0.600 clears the 0.6 threshold, so that wrong label would be accepted and
+ * would overwrite a correct deterministic effect - and `action.effect` becomes
+ * `recipe.expect` in synthesize.js, which verify.js then checks the replay
+ * against. A confidently wrong label there fails a tool that works. Eleven
+ * cheap calls are worth more than one cheap wrong answer.
+ */
+const CONCURRENCY = 4
+
+async function classifyOne(text) {
   const { base, model, threshold, timeoutMs } = config.pioneer
   const res = await fetch(`${base}/inference`, {
     method: 'POST',
     headers: { 'X-API-Key': config.keys.pioneer, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model_id: model, text: texts, schema: PERCEPTION_SCHEMA, threshold }),
+    body: JSON.stringify({ model_id: model, text, schema: PERCEPTION_SCHEMA, threshold }),
     signal: AbortSignal.timeout(timeoutMs),
   })
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
-    // 402/403 are billing, not transient - worth naming so nobody retries into a wall.
-    const hint = res.status === 402 || res.status === 403 ? ' (credits exhausted - add credits at pioneer.ai)' : ''
+    const hint = res.status === 402 || res.status === 403 ? ' (no credits - add a card at pioneer.ai)' : ''
     throw new Error(`pioneer HTTP ${res.status}${hint} ${detail.slice(0, 200)}`)
   }
-  const body = await res.json()
-  const items = Array.isArray(body.result) ? body.result : [body.result]
-  return { items, meta: { inferenceId: body.inference_id, latencyMs: body.latency_ms, tokens: body.token_usage, modelUsed: body.model_used } }
+  return res.json()
+}
+
+export async function classify(texts) {
+  const bodies = new Array(texts.length)
+  let next = 0
+  const worker = async () => {
+    while (next < texts.length) {
+      const i = next++
+      bodies[i] = await classifyOne(texts[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, texts.length) }, worker))
+
+  const first = bodies.find(Boolean) || {}
+  const items = bodies.map((b) => (Array.isArray(b?.result) ? b.result[0] : b?.result))
+  return {
+    items,
+    meta: {
+      inferenceId: first.inference_id,
+      latencyMs: bodies.reduce((t, b) => t + (b?.latency_ms || 0), 0),
+      tokens: bodies.reduce((t, b) => t + (b?.token_usage || 0), 0),
+      modelUsed: first.model_used,
+    },
+  }
 }
 
 /**
@@ -151,7 +192,7 @@ export async function classify(texts) {
  * design, and the flag is what a fal tier would consume.
  */
 export async function distill(actions, { log } = {}) {
-  const stats = { source: 'heuristic', total: actions.length, confident: 0, escalate: 0, disagreed: 0, destructive: 0 }
+  const stats = { source: 'heuristic', total: actions.length, confident: 0, escalate: 0, disagreed: 0, contested: 0, destructive: 0 }
 
   if (!actions.length) return stats
   if (!available()) {
@@ -184,11 +225,33 @@ export async function distill(actions, { log } = {}) {
     if (!change) unparsed++
 
     const confident = change && (change.confidence == null || change.confidence >= config.pioneer.threshold)
-    const kind = confident && KINDS.includes(change.label) ? change.label : action.effect
+
+    /**
+     * The app's own words outrank a 300M encoder.
+     *
+     * Measured on the real trajectory: "Success The task bucket has been
+     * changed successfully" classifies as `deletion` at 0.618, and "Success
+     * The task was saved successfully. UNDO" as `deletion` at 0.988. Both are
+     * mutations and the app said so in plain English. No threshold saves you
+     * from 0.988, so this is a precedence rule rather than a tuning problem.
+     *
+     * It matters because `action.effect` becomes `recipe.expect` in
+     * synthesize.js, which verify.js then checks a fresh replay against.
+     * Accepting either of those would have failed a tool that works.
+     *
+     * Where the app announced nothing the heuristic is only counting DOM
+     * nodes, and there the encoder is the better guess. That is the only place
+     * it may overrule.
+     */
+    const announced = Boolean(action.evidence?.announced)
+    const contested = confident && announced && KINDS.includes(change.label) && change.label !== action.effect
+    const mayOverrule = confident && !announced
+    const kind = mayOverrule && KINDS.includes(change.label) ? change.label : action.effect
 
     if (confident) stats.confident++
     else stats.escalate++
-    if (change && kind !== action.effect) stats.disagreed++
+    if (contested) stats.contested++
+    if (kind !== action.effect) stats.disagreed++
 
     action.perception = {
       kind,
@@ -196,7 +259,10 @@ export async function distill(actions, { log } = {}) {
       source: confident ? 'pioneer' : 'heuristic',
       heuristicKind: action.effect,
       // What a fal VLM tier would pick up. Nothing consumes it yet.
-      escalate: !confident,
+      // What the vision tier would resolve: either the encoder would not
+      // commit, or it contradicted the app's own announcement.
+      escalate: !confident || contested,
+      contested,
       entities,
       inferenceId: meta.inferenceId,
     }
@@ -225,6 +291,7 @@ export function summarise(s) {
   const bits = [`${s.confident}/${s.total} confident`]
   if (s.escalate) bits.push(`${s.escalate} to escalate`)
   if (s.disagreed) bits.push(`${s.disagreed} overruled the node count`)
+  if (s.contested) bits.push(`\x1b[33m${s.contested} contradicted the app and were refused\x1b[0m`)
   if (s.destructive) bits.push(`${s.destructive} destructive`)
   if (s.latencyMs != null) bits.push(`${Math.round(s.latencyMs)}ms`)
   return `perception: pioneer ${s.model} - ${bits.join(', ')}`
