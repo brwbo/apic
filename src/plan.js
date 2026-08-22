@@ -113,7 +113,47 @@ const GESTURE_VERB = [
  * explicitly rather than left to fall through, because "ADD TO FAVORITES" parses
  * as a perfectly good create and would otherwise be emitted as `createTask`.
  */
-const OFF_SLICE = /favou?rit|subscrib|duplicat|relation|attachment|reaction|priorit|progress|colou?r|remind|repeat|\bdate\b|filter|\bsort\b|comment|assignee|\buser\b|share|team|\bview\b|import|export|password|token|migrat/i
+let OFF_SLICE = /favou?rit|subscrib|duplicat|relation|attachment|reaction|priorit|progress|colou?r|remind|repeat|\bdate\b|filter|\bsort\b|comment|assignee|\buser\b|share|team|\bview\b|import|export|password|token|migrat/i
+
+/**
+ * Extend the vocabulary with nouns discovered from the target app's own docs.
+ *
+ * RESOURCE above is Vikunja's words. Point apic at Gitea and it is asked about
+ * issues, repositories and milestones by a table that has never heard of them,
+ * so `gesture()` returns null and the control is dropped. ground.js reads the
+ * target's documentation and calls this with what it found.
+ *
+ * ADDITIVE ONLY, deliberately. The built-in table is tuned against a real
+ * compile; a bad noun from a model that silently replaced it would cost more
+ * than an ungrounded compile ever could. Learned entries are APPENDED, so a
+ * built-in always matches first, and a learned off-slice word colliding with a
+ * known noun is refused outright - that single mistake would delete a working
+ * tool rather than merely fail to find one.
+ *
+ * Returns what was actually taken, not what was offered.
+ */
+export function learnVocabulary(vocab) {
+  const escape = (w) => String(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const known = () => new Set(RESOURCE.map(([, n]) => n))
+  const added = []
+
+  for (const { canonical, synonyms = [] } of vocab?.nouns || []) {
+    if (known().has(canonical)) continue
+    const words = [canonical, ...synonyms].map(escape)
+    RESOURCE.push([new RegExp(`\\b(${words.join('|')})s?\\b`, 'i'), canonical])
+    added.push(canonical)
+  }
+
+  const nouns = known()
+  const offered = vocab?.offSlice || []
+  const off = offered.filter((w) => !nouns.has(w))
+  if (off.length) OFF_SLICE = new RegExp(`${OFF_SLICE.source}|${off.map(escape).join('|')}`, 'i')
+
+  return { added, offSlice: off.length, refused: offered.length - off.length }
+}
+
+/** The nouns this compiler currently understands - built-in plus anything learned. */
+export function vocabulary() { return RESOURCE.map(([, n]) => n) }
 
 /** Which board resource a piece of text is about, if any. */
 export function resourceOf(text) {
