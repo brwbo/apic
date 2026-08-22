@@ -42,6 +42,61 @@ const JSON_TYPE = { number: 'number', email: 'string', date: 'string', checkbox:
 /** A generated id like task-add-textarea-ruqx7h8qv: unique per page load. */
 const AUTO = /[-_][a-z0-9]{7,}$/i
 
+/**
+ * The locators replay should try for one field, in order.
+ *
+ * #task-add-textarea-tfrx4opvy is a different element on the next page load, so
+ * a recipe pinned to it can never replay. replay.js already falls back to
+ * name/placeholder/label - it just has to be handed them.
+ */
+const fieldRecipe = (p) => ({
+  selector: p.selector,
+  ...(p.name && !AUTO.test(p.name) ? { name: p.name } : {}),
+  ...(p.placeholder ? { placeholder: p.placeholder } : {}),
+  ...(p.label ? { label: p.label } : {}),
+})
+
+/** Path part of a URL, whether it arrived absolute or relative. */
+const pathOf = (u) => { try { return new URL(u, 'http://x').pathname } catch { return String(u || '') } }
+
+/** A URL ending in a numeric id: one row, not a collection. */
+const INSTANCE = /\/\d+$/
+
+/**
+ * Where replay can find another instance of the resource a tool acts on.
+ *
+ * The five task tools were all discovered on /tasks/308 - a task the explorer
+ * created itself, and which deleteTask then deleted. Pinning a tool to the row
+ * it was born on makes it a recording, not a tool: every replay after the first
+ * lands on a 404.
+ *
+ * Nothing extra has to be observed to fix it. The action that created that row
+ * already recorded the link to it (`created`) and the page it was created from
+ * (`seedUrl`) - so that page lists this resource, and replay can ask it for a
+ * row that exists now. Collection-seeded tools get nothing and keep their URL.
+ */
+function seedResolver(actions) {
+  const creators = new Map()
+  for (const a of actions) if (a.created) creators.set(pathOf(a.created), a)
+  return (action) => {
+    const here = pathOf(action.seedUrl)
+    const creator = creators.get(here)
+    if (!creator || !INSTANCE.test(here)) return undefined
+    return {
+      from: pathOf(creator.seedUrl),
+      pattern: `^${here.replace(/\/\d+$/, '/\\d+')}$`,
+      // And if the listing is empty, make one. deleteTask removes exactly the
+      // row its four siblings were compiled against, so "no rows left" is the
+      // normal state, not an edge case. The compiler already learned how to
+      // create this resource - that recipe is the precondition for using it.
+      create: {
+        click: creator.control || creator.label,
+        fields: creator.parameters.map(fieldRecipe),
+      },
+    }
+  }
+}
+
 /** Say how we know this works, in the terms the evidence actually supports. */
 function describeTool(action) {
   const a = action.evidence?.announced
@@ -85,17 +140,9 @@ export function heuristicTool(action) {
       expect: 'relocation',
     } : {
       seedUrl: action.seedUrl,
+      ...(action.seed ? { seed: action.seed } : {}),
       click: action.label,
-      fields: action.parameters.map((p) => ({
-        selector: p.selector,
-        schemaKey: p.schemaKey,
-        // #task-add-textarea-tfrx4opvy is a different element on the next page
-        // load, so a recipe pinned to it can never replay. replay.js already
-        // falls back to name/placeholder/label - it just has to be handed them.
-        ...(p.name && !AUTO.test(p.name) ? { name: p.name } : {}),
-        ...(p.placeholder ? { placeholder: p.placeholder } : {}),
-        ...(p.label ? { label: p.label } : {}),
-      })),
+      fields: action.parameters.map((p) => ({ ...fieldRecipe(p), schemaKey: p.schemaKey })),
       submit: true,
       expect: action.effect,
     },
@@ -113,6 +160,8 @@ export function heuristicTool(action) {
  */
 export function synthesize(actions, { requireConfirmation = true } = {}) {
   const seen = new Set()
+  const seedFor = seedResolver(actions)
+  for (const a of actions) a.seed = seedFor(a)
   return actions
     .filter((a) => a.committed)
     // persist.js reloaded the page and could not find what we submitted, so the
