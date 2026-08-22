@@ -1,0 +1,6 @@
+{
+  "app": "gitea",
+  "target": "http://localhost:3001",
+  "generatedBy": "apic",
+  "tools": []
+}
