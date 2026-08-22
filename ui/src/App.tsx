@@ -1,6 +1,7 @@
 import Hero from "@/components/hero";
 import Stack from "@/components/stack";
 import Problem from "@/components/problem";
+import Compile from "@/components/compile";
 import Stats from "@/components/stats";
 import Demo from "@/components/demo";
 import Partners from "@/components/partners";
@@ -18,6 +19,7 @@ export default function App() {
       <Hero still={still} stillTime={stillTime} />
       <Stack />
       <Problem />
+      <Compile />
       <Demo />
       <Stats />
       <Partners />

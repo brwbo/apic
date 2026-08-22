@@ -1,24 +1,4 @@
 import { SectionLabel } from "@/components/section-label";
-const COLUMNS = [
-  {
-    kind: "An afternoon",
-    when: "when the source has an API",
-    tone: "ok",
-    lines: ["Read the docs", "Write the client", "Ship it", "Forget it exists for years"],
-  },
-  {
-    kind: "Never finished",
-    when: "when the source is just a page",
-    tone: "bad",
-    lines: [
-      "Write a scraper against markup you do not own",
-      "It breaks the week somebody renames a class",
-      "So a person copies the rows out by hand",
-      "Every Monday, indefinitely",
-    ],
-  },
-];
-
 export function Problem() {
   return (
     <section id="problem" className="border-t border-white/10 bg-[#120a10] px-6 py-24 sm:px-10 sm:py-32">
@@ -66,26 +46,6 @@ export function Problem() {
           </figcaption>
         </figure>
 
-        <div className="mt-12 grid gap-x-14 gap-y-10 sm:grid-cols-2">
-          {COLUMNS.map((col, i) => (
-            <div key={col.kind} className={i === 1 ? "sm:border-l sm:border-white/10 sm:pl-14" : ""}>
-              <p
-                className={`font-[family-name:var(--font-display)] text-[clamp(1.5rem,2.6vw,2rem)] font-bold leading-none tracking-[-0.035em] ${i === 1 ? "text-primary" : "text-white/85"}`}
-              >
-                {col.kind}
-              </p>
-              <p className="mt-2 text-[14px] text-white/40">{col.when}</p>
-              <ul className="mt-6 space-y-3">
-                {col.lines.map((line, j) => (
-                  <li key={line} className="flex gap-4 text-[15px] leading-snug text-white/55">
-                    <span className="w-4 shrink-0 font-mono text-[12px] text-white/20">{j + 1}</span>
-                    {line}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
       </div>
     </section>
   );
