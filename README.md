@@ -87,13 +87,24 @@ may claim at most one of them, so recall cannot be inflated by loose matching.
 ```
 RECALL     8/18    of the board write-ops in the target's own API
 PRECISION  9/9     emitted tools that map to a real operation
-VERIFIED   8/9     survived a cold replay with arguments never seen before
+VERIFIED   9/9     survived a cold replay with arguments never seen before
 ```
 
-Nine tools discovered, eight served. `markTask` is rejected and kept in
-`tools.json` with `verified: false` — **a rejected tool is evidence about the
-compiler, not garbage.** Marking a task done produces no banner and echoes no
-argument, so nothing confirms the write, and an unconfirmed tool is not served.
+Nine tools discovered, nine served. Rejected tools are not deleted — they stay
+in `tools.json` with `verified: false`, because **a rejected tool is evidence
+about the compiler, not garbage.**
+
+**`markTask` is flaky and that is worth more than the 9/9.** Two consecutive
+verify runs against the same bundle, no changes in between, gave 8/9 then 9/9:
+it failed with *"observed mutation but nothing confirmed a write"* and then
+passed with *"Success — the task was saved successfully."* The likely cause is
+the seeded task's state — land on one already done and the control reads MARK AS
+UNDONE and confirms differently. It takes no parameters, so it cannot
+disambiguate by argument either.
+
+That is a **live instance of the flake-vs-drift problem** listed below as
+unsolved: `watch` would count that failure as drift and call `heal`, when
+nothing drifted at all.
 
 Continuous verification over a live afternoon:
 
@@ -119,7 +130,7 @@ which is what the status column records.
 |---|---|---|---|
 | **OpenAI** | Verify | An independent verdict on whether the predicted effect occurred, layered on the keyless diff floor. It can uphold a rejection, never overturn one | **in use** — it ruled on the one tool `verify` rejected |
 | **fal** | Perceive | Fast VLM for meaningful-vs-cosmetic judgement, escalated to only when the DOM diff is ambiguous | **in use** — 4/4 escalated steps judged last compile, 2 of them ruled cosmetic. CLI path only; `compile_app` does not escalate |
-| **Pioneer** | Distil | Small classifier over the diff text — state change, destructiveness, domain nouns. One batched call per compile | **blocked** — `403 payment_method_required`; perception falls back to the heuristic |
+| **Pioneer** | Distil | Small classifier over the diff text — state change, destructiveness, domain nouns. One batched call per compile | **blocked all day** — `403 payment_method_required`, later `401 Invalid API key`; perception falls back to the heuristic |
 | **h** | Explore | Reads the page and names the write actions the keyless vocabulary refused | **in use** — runs once per seed on the leftovers; names 0 of 3 on Vikunja, correctly |
 | **Tavily** | Ground | App documentation → domain vocabulary, so tools are named `createIssue`, not `btn_submit_2` | **not built** — declared in `config.js` and `doctor.js`, never implemented |
 
@@ -170,10 +181,9 @@ first, then the model. **The model can uphold a rejection and never overturn
 one** — a tool the diff could not confirm stays rejected however confident the
 judge is.
 
-*Measured:* `markTask` is the tool that failed verification, and its record
-reads `openai/gpt-4.1-mini disagreed but cannot overturn a rejection`. That
-asymmetry is deliberate: a judge that can promote its own guesses is a
-precision leak.
+*Measured:* on the run where `markTask` failed, its record reads
+`openai/gpt-4.1-mini disagreed but cannot overturn a rejection`. That asymmetry
+is deliberate: a judge that can promote its own guesses is a precision leak.
 
 **Pioneer — GLiNER2 (`fastino/gliner2-base-v1`), one batched `POST /inference`.**
 [`distill.js`](src/distill.js) sends the whole trajectory's diff text in a
@@ -336,21 +346,23 @@ Stated plainly, because a compiler that hides its failure modes isn't one.
 - **fal escalation is CLI-only.** `adjudicate()` runs from `cli.js`, not
   `compile.js`, so a compile driven through `compile_app` on the MCP server
   never reaches the vision tier.
-- **Pioneer returns 403** and perception falls back to the heuristic. Each
+- **Pioneer was unavailable all day** — `403 payment_method_required`, then
+  `401 Invalid API key` on the same untouched key a few hours later — so
+  perception falls back to the heuristic. Each
   integration was written to degrade silently, and each did — the degradation
   is the intended behaviour; not noticing for a whole afternoon is not.
 - **Only one app has been compiled end to end.** A second target (Gitea)
   authenticates through the same discovered login with no configuration, but
   discovery returns zero candidates there. Unresolved.
 - **8/18 recall.** Missing: bucket creation, comments, relations and attachments.
+- **`markTask` fails roughly one run in two** (see Results). The effect is real
+  and observed; whether anything *confirms* it depends on the task's existing
+  state. Any live `npm run verify` should be expected to print 8/9 or 9/9.
 - **Concurrent runs collide.** Every command shares one stored session at
   `.apic/session.json`, so a compile and a verify started together can destroy
   each other's browser context mid-run (`Error setting storage state: Execution
   context was destroyed`). Pass a distinct `APIC_SESSION` per run as a
   workaround; the real fix is a per-run session file by default.
-- **`markTask` fails verification.** The effect is observed and correct, but
-  toggling a checkbox produces no banner and echoes no argument, so nothing
-  independently confirms the write. It stays rejected rather than served.
 - **Watch treats every failure as drift.** Real flake-vs-drift classification
   doesn't exist. Three false-positive classes were fixed by hand — rate
   limiting, token expiry, and a crashed page — but the general problem stands.
@@ -361,8 +373,6 @@ Stated plainly, because a compiler that hides its failure modes isn't one.
   degrade the target until it's reset.
 - **Auth is sidestepped.** One login, one user, no permission scopes — which is
   the hard part of the problem in real enterprise software.
-- **Pioneer is blocked** on an account credits error, so the SLM classifier is
-  idle and perception falls back to the heuristic.
 
 ## Prior work declaration
 
