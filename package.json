@@ -1,0 +1,22 @@
+{
+  "name": "apic",
+  "version": "0.1.0",
+  "description": "App-to-API compiler: a computer-use agent explores an app once and emits a verified, typed MCP server for it.",
+  "type": "module",
+  "bin": {
+    "apic": "./src/cli.js"
+  },
+  "scripts": {
+    "score": "node src/score.js",
+    "compile": "node src/cli.js",
+    "serve": "node src/server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@fal-ai/client": "^1.10.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "dotenv": "^17.4.2",
+    "openai": "^7.5.0",
+    "playwright": "^1.62.1"
+  }
+}

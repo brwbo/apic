@@ -1,0 +1,8 @@
+.env
+.env.local
+*.key
+node_modules/
+out/
+tmp/
+*.log
+recordings/*.webm
